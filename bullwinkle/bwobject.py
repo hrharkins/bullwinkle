@@ -48,12 +48,12 @@ class BWObject(object):
     __metaclass__ = BWObjectMeta
 
     def __init__(_self, **_kw):
-        cls = type(self)
+        cls = type(_self)
         for name, value in _kw.iteritems():
             obj = getattr(cls, name, None)
-            fn = getattr(obj, '__member__', None)
+            fn = getattr(obj, '__initobj__', None)
             if fn is not None:
-                fn(self, name, value)
+                fn(_self, name, value)
 
     @classmethod
     def mix(cls, *others):
