@@ -1,6 +1,11 @@
 '''
 bwmember -- Easy to build type-safe propreties
 
+>>> class MyClass(object):
+...     x = member(int)
+...
+>>> c = MyClass(x=5)
+>>> c.x
 '''
 
 from bwobject import BWObject
@@ -12,10 +17,23 @@ class BWMember(BWObject):
         _self.kw = _kw
         _self.init(**_kw)
 
-    def init(self, name=None, default=None, lazy=False):
+    def init(self, name=None, default=None, lazy=False, required=False):
         self.name = name
         self.default = default
         self.lazy = lazy
+        self.required = required
+
+    @cqached
+    def isa_fn(self):
+        tests = []
+        names = {}
+        for constraint in self.isa:
+            if isinstance(constraint, type):
+                tests.append('isinstance(o, %s)' % constraint.__name__)
+                names[constraint.__name__] = constraint
+        exec 'tester = lambda o: ' + ' or '.join(tests) in names
+        tester = names.pop('tester')
+        return tester
 
     def __call__(self, fn):
         return type(self)(*self.isa, **dict(self.kw, default=fn))
