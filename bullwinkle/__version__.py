@@ -8,7 +8,7 @@ information in SHELL loadable foramt.
 
 __LICENSE__ = 'LGPL-3.0 (Run python -m bullwinkle.__license__ for text)'
 __AUTHOR__ = 'Rich Harkins'
-__AUTHOR_EMAIL__ = 'bullwinkle@googlecode.com'
+__AUTHOR_EMAIL__ = 'rich.harkins@gmail.com'
 __VERSION__ = 1.0
 __PROJECT__ = 'bullwinkle'
 
