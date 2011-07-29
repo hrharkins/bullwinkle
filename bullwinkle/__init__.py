@@ -15,7 +15,7 @@ In addition, bullwinkle provides:
 
 from __version__ import *
 from bwobject import BWObject
-from bwmethod import (before_super, after_super, follow_super,
+from bwmethod import (before_super, after_super, follow_super, filter_super,
                       override_super, around_super, override_result)
 from bwcached import cached, classcached
 
