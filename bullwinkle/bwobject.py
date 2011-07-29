@@ -6,6 +6,7 @@ metaclass that make most of the other features possible.
 '''
 
 from __version__ import *
+import sys
 
 class BWObjectMeta(type):
     '''
@@ -45,6 +46,14 @@ class BWObject(object):
     '''
 
     __metaclass__ = BWObjectMeta
+
+    def __init__(_self, **_kw):
+        cls = type(self)
+        for name, value in _kw.iteritems():
+            member = getattr(cls, name, None)
+            fn = getattr(member, '__bwinit__', None)
+            if fn is not None:
+                fn(self, name, value)
 
     @classmethod
     def mix(cls, *others):
