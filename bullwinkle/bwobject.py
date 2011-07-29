@@ -1,3 +1,12 @@
+'''
+bwobject -- Base class required to use most bullwinkle features
+
+This module exports the BWObject base class that integrates the necessary
+metaclass that make most of the other features possible.
+'''
+
+from __version__ import *
+
 class BWObjectMeta(type):
     '''
     Provides the machinery for making Object work.  It scans any derived
@@ -16,7 +25,10 @@ class BWObjectMeta(type):
             if fn is not None:
                 replacement = fn(cls, name)
                 if replacement is not None:
-                    setattr(cls, name, replacement)
+                    if replacement is type(None):
+                        delattr(cls, name)
+                    else:
+                        setattr(cls, name, replacement)
 
 class BWObject(object):
     '''
