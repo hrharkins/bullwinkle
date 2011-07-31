@@ -6,15 +6,15 @@ packages of this library.  If run with python -m, prints the version
 information in SHELL loadable foramt.
 '''
 
-__LICENSE__ = 'LGPL-3.0 (Run python -m bullwinkle.__license__ for text)'
-__AUTHOR__ = 'Rich Harkins'
-__AUTHOR_EMAIL__ = 'rich.harkins@gmail.com'
-__VERSION__ = 1.0
-__PROJECT__ = 'bullwinkle'
+LICENSE = 'LGPL-3.0 (Run python -m bullwinkle.__license__ for text)'
+AUTHOR = 'Rich Harkins'
+AUTHOR_EMAIL = 'rich.harkins@gmail.com'
+VERSION = 0.1
+PROJECT = 'bullwinkle'
 
 if __name__ == '__main__':
-    print('Project=%r' % __PROJECT__)
-    print('Author="%s<%s>"' % (__AUTHOR__, __AUTHOR_EMAIL__))
-    print('Version=%r' % __VERSION__)
-    print('License=%r' % __LICENSE__)
+    print('Project=%r' % PROJECT)
+    print('Author="%s<%s>"' % (AUTHOR, AUTHOR_EMAIL))
+    print('Version=%r' % VERSION)
+    print('License=%r' % LICENSE)
 
