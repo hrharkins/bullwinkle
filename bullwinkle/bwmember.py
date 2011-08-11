@@ -48,6 +48,8 @@ class BWMember(BWObject):
         for check in self.isa:
             if isinstance(obj, check):
                 return True
+            elif check is None and obj is None:
+                return True
         return False
 
     def __initobj__(self, obj, name, value):
