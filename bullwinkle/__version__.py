@@ -9,7 +9,7 @@ information in SHELL loadable foramt.
 LICENSE = 'LGPL-3.0 (Run python -m bullwinkle.__license__ for text)'
 AUTHOR = 'Rich Harkins'
 AUTHOR_EMAIL = 'rich.harkins@gmail.com'
-VERSION = 0.1
+VERSION = 0.2
 PROJECT = 'bullwinkle'
 
 if __name__ == '__main__':
