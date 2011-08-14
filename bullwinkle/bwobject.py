@@ -56,7 +56,7 @@ class BWObject(object):
                 fn(_self, name, value)
 
     @classmethod
-    def mix(cls, *others):
+    def mix(cls, *others, **kw):
         '''
         When mixing in Object with other classes, this class method will
         make creating the correct metaclass easier.
@@ -95,5 +95,6 @@ class BWObject(object):
             if metaclass is not None:
                 basemeta.append(metaclass)
         metabase = type('<metaclass for %s>' % names, tuple(basemeta), {})
-        return metabase('<mixin-base for %s>' % names, bases, {})
+        return metabase('<mixin-base for %s>' % names, bases,
+            dict(kw, __module__=cls.__module__))
 

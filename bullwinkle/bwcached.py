@@ -7,7 +7,13 @@ In addition, these do NOT require BWObject to work so may be preffed in
 some applications.
 '''
 
-def cached(fn):
+class Volatile(object):
+    __slots__ = ['obj']
+
+    def __init__(self, obj):
+        self.obj = obj
+
+def cached(fn, Volailte=Volatile):
     '''
     >>> class MyClass(object):
     ...     def __init__(self, x):
@@ -34,14 +40,16 @@ def cached(fn):
             return fn
         else:
             obj = fn(target)
-            target.__dict__[name] = obj
+            if type(obj) is not Volatile:
+                target.__dict__[name] = obj
             return obj
     cls = type(fn.__name__,
                (object,),
                dict(__doc__=fn.__doc__, __get__=wrapper))
     return cls()
+cached.volatile = Volatile
 
-def classcached(fn):
+def classcached(fn, Volailte=Volatile):
     '''
     >>> class MyClass(object):
     ...     x = 10
@@ -65,10 +73,12 @@ def classcached(fn):
     def wrapper(self, target, cls=None):
         target = cls or type(target)
         obj = fn(target)
-        setattr(target, name, obj)
+        if type(obj) is not Volatile:
+            setattr(target, name, obj)
         return obj
     cls = type(fn.__name__,
                (object,),
                dict(__doc__=fn.__doc__, __get__=wrapper))
     return cls()
+classcached.volatile = Volatile
 
