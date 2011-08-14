@@ -5,6 +5,9 @@ setup -- Setup script for bullwinkle
 from bullwinkle.__version__ import *
 from setuptools import setup
 
+if not VERSION.label:
+    raise RuntimeError("Change log not written for %s" % (VERSION,))
+
 setup(
     name = 'bullwinkle',
     version = VERSION,

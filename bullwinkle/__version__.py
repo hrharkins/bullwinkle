@@ -11,7 +11,7 @@ from __changelog__ import CHANGELOG
 LICENSE = 'LGPL-3.0'
 AUTHOR = 'Rich Harkins'
 AUTHOR_EMAIL = 'rich.harkins@gmail.com'
-VERSION = str(CHANGELOG[-1])
+VERSION = CHANGELOG[-1]
 PROJECT = 'bullwinkle'
 LICENSE_INFO = 'Run python -m bullwinkle.LICENSE for license text'
 CHANGELOG_INFO = 'Run python -m bullwinkle.__changelog__ for full log'
