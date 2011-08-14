@@ -19,6 +19,7 @@ Traceback (most recent call last):
 TypeError: None ('x') must be one of: (int, str)
 '''
 
+from __version__ import *
 from bwobject import BWObject
 from bwmethod import after_super
 from bwcached import cached

@@ -7,8 +7,8 @@ results.  This draws etensively from Perl::Moose but adds some Python
 flavour to make things fit in a Pythonic world.
 '''
 
-from bwobject import BWObject
 from __version__ import *
+from bwobject import BWObject
 
 class MethodBuilder(BWObject):
     require_base = True

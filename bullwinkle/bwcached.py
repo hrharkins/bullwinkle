@@ -7,6 +7,8 @@ In addition, these do NOT require BWObject to work so may be preffed in
 some applications.
 '''
 
+from __version__ import *
+
 class Volatile(object):
     __slots__ = ['obj']
 

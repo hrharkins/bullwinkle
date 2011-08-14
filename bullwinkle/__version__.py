@@ -6,44 +6,31 @@ packages of this library.  If run with python -m, prints the version
 information in SHELL loadable foramt.
 '''
 
-class Version(tuple):
-    def __new__(cls, src):
-        if src is None or isinstance(src, Version):
-            return src
-        elif isinstance(src, basestring):
-            return Version(src.split('.'))
-        elif isinstance(src, (int, float)):
-            return Version(str(src))
-        else:
-            return super(Version, cls).__new__(cls, src)
+from __changelog__ import CHANGELOG
 
-    def __add__(self, other):
-        if isinstance(other, basestring):
-            return str(self) + other
-        else:
-            return super(Version, self).__add__(other)
-
-    def __radd__(self, other):
-        if isinstance(other, basestring):
-            return other + str(self)
-        else:
-            return other.__add__(self)
-
-    def __str__(self):
-        return '.'.join(self)
-
-    def __repr__(self):
-        return 'Version(%r)' % str(self)
-
-LICENSE = 'LGPL-3.0 (Run python -m bullwinkle.__license__ for text)'
+LICENSE = 'LGPL-3.0'
 AUTHOR = 'Rich Harkins'
 AUTHOR_EMAIL = 'rich.harkins@gmail.com'
-VERSION = Version('0.2.4')
+VERSION = str(CHANGELOG[-1])
 PROJECT = 'bullwinkle'
+LICENSE_INFO = 'Run python -m bullwinkle.LICENSE for license text'
+CHANGELOG_INFO = 'Run python -m bullwinkle.__changelog__ for full log'
+
+__author__ = AUTHOR
+__version__ = VERSION
+__all__ = ['LICENSE', 'AUTHOR', 'AUTHOR_EMAIL',
+           'VERSION', 'PROJECT', 'LICENSE_INFO',
+           'CHANGELOG_INFO', '__author__', '__version__']
 
 if __name__ == '__main__':
-    print('Project=%r' % PROJECT)
-    print('Author="%s<%s>"' % (AUTHOR, AUTHOR_EMAIL))
-    print('Version=%r' % VERSION)
-    print('License=%r' % LICENSE)
+    shvar = PROJECT.replace('-', '_').replace(' ', '_').lower()
+    print('')
+    print('# %r version information (*SH-compatible format)' % PROJECT)
+    print('%s_AUTHOR="%s <%s>"' % (shvar, AUTHOR, AUTHOR_EMAIL))
+    print('%s_VERSION=%r' % (shvar, VERSION))
+    print('%s_LICENSE=%r' % (shvar, LICENSE))
+    print('')
+    print('# ' + LICENSE_INFO)
+    print('# ' + CHANGELOG_INFO)
+    print('')
 

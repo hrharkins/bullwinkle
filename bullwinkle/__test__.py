@@ -7,7 +7,9 @@ This can be invoked via python bullwinkle.__test__
 import doctest
 
 if __name__ == '__main__':
-    import bwobject, bwmethod, bwcached, bwmember, bwthrowable
+    import __changelog__, bwobject, bwmethod
+    import bwcached, bwmember, bwthrowable
+    doctest.testmod(__changelog__)
     doctest.testmod(bwobject)
     doctest.testmod(bwmethod)
     doctest.testmod(bwcached)
