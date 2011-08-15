@@ -46,14 +46,36 @@ class BWObject(object):
     '''
 
     __metaclass__ = BWObjectMeta
+    __positional__ = ()
 
-    def __init__(_self, **_kw):
+    def __init__(_self, *_args, **_kw):
+        positional = _self.__positional__
+        if len(_args) > len(positional):
+            raise TypeError(
+                '%s() can only accept up to %d positional arguments.'
+                % (type(_self).__name__, len(positional)))
+        elif positional:
+            for name, value in zip(positional, _args):
+                if name in _kw:
+                    raise TypeError('Multiple definitions for %r' % name)
+                else:
+                    _kw[name] = value
         cls = type(_self)
         for name, value in _kw.iteritems():
             obj = getattr(cls, name, None)
             fn = getattr(obj, '__initobj__', None)
             if fn is not None:
                 fn(_self, name, value)
+        required = getattr(_self, '__required__', ())
+        if required:
+            NOT_FOUND = type(None)
+            missing = []
+            for name in required:
+                if getattr(_self, name, NOT_FOUND) is NOT_FOUND:
+                    missing.append(name)
+            if missing:
+                raise TypeError('%s need to be specified when constructing %s.'
+                                % (', '.join(missing), type(_self).__name__))
 
     @classmethod
     def mix(cls, *others, **kw):
@@ -97,4 +119,26 @@ class BWObject(object):
         metabase = type('<metaclass for %s>' % names, tuple(basemeta), {})
         return metabase('<mixin-base for %s>' % names, bases,
             dict(kw, __module__=cls.__module__))
+
+    def __str__(self):
+        format = getattr(self, '__bwformat__', None)
+        if format:
+            return format % self.__objdict__
+        else:
+            return repr(self)
+
+    @property
+    def __objdict__(self):
+        class ObjectDict(object):
+            def __getitem__(od, name):
+                return getattr(self, name)
+        return ObjectDict()
+
+    def __repr__(self):
+        name = type(self).__name__
+        members = sorted(getattr(self, '__bwmembers__', ()),
+                         lambda a, b: cmp(a.__name__, b.__name__))
+        kw = ', '.join('%s=%r' % (member.__name__, member.__get__(self))
+                       for member in members)
+        return '%s(%s)' % (name, kw)
 
