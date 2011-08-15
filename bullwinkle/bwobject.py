@@ -47,6 +47,7 @@ class BWObject(object):
 
     __metaclass__ = BWObjectMeta
     __positional__ = ()
+    __bwformat__ = None
 
     def __init__(_self, *_args, **_kw):
         positional = _self.__positional__

@@ -11,6 +11,7 @@ may expand outside of that realm over time.  Among these feeatures are:
 In addition, bullwinkle provides:
 
  * Automatic class member binding via __bindclass__ methods.
+
 '''
 
 from __version__ import *
@@ -20,4 +21,6 @@ from bwmethod import (before_super, after_super, follow_super, filter_super,
 from bwcached import cached, classcached, cachedmethod, classcachedmethod
 from bwmember import member
 from bwthrowable import throw, catch, BWThrowable, TC
+
+__doc__ += '\nCHANGELOG:\n\n' + str(CHANGELOG)
 

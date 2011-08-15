@@ -13,11 +13,12 @@ one or more of its members.  In these cases, member objects come into play:
 ...     x = member(int)
 ...     y = member(int)
 ...     __bwformat__ = '<%(x)d, %(y)d>'
+...     __positional__ = ('x', 'y')
 ...
 
 Now we can define a point using keyword arguments:
 
->>> p = Point(x=5, y=7)
+>>> p = Point(5, 7)
 >>> p
 Point(x=5, y=7)
 >>> print p
@@ -132,7 +133,7 @@ Hello world
 >>> joiner.contents = 'blah'
 Traceback (most recent call last):
     ...
-AttributeError: can't set attribute
+AttributeError: can\'t set attribute
 
 ========================
 === Optional members ===
@@ -143,7 +144,7 @@ optional=True.  These memebers will not be checked for value during
 object __init__ in BWObject.  Objects with default or builder values will
 be set to optional by default.  Setting optional to False will cause the
 value to be determined on object init instead of first member use.  Members
-are not optional by default otherwise.  
+are not optional by default otherwise.
 
 IMPORTANT: Optional members that do not have default/builder settings can
             still generate exceptions when probed.  Generally, default
@@ -153,6 +154,29 @@ IMPORTANT: Optional members that do not have default/builder settings can
 Traceback (most recent call last):
     ...
 TypeError: x, y need to be specified when constructing Point.
+
+====================================
+=== Extending superclass members ===
+====================================
+
+Members can be extended from the superclass by using the extend() function.
+This will integrate the superclass's concept of a member to match a
+subclass's conecpt allowing for semi-anonymous modifications of members.
+An additional utility function, extend_str allows for manipulation of base
+class strings.
+
+>>> class Circle(Point):
+...     x = extend(default=0)
+...     y = extend(default=0)
+...     radius = member(int)
+...     __bwformat__ = extend_str(chopright=1,
+...                               prefix='C', suffix=' r%(radius)s>')
+...
+>>> c = Circle(5, y=1, radius=5)
+>>> c
+Circle(radius=5, x=5, y=1)
+>>> print c
+C<5, 1 r5>
 '''
 
 from __version__ import *
@@ -171,12 +195,14 @@ class BWMember(BWObject):
     default = AttributeError
     builder = None
     optional = False
+    extend = False
 
     def __init__(self, *isa, **_kw):
         self.isa = isa
+        self._kw = _kw
         self.init(**_kw)
 
-    def init(self, ro=None, default=NOT_FOUND,
+    def init(self, ro=None, default=NOT_FOUND, extend=False,
                    optional=None, builder=None):
         if ro is not None:
             self.ro = ro
@@ -188,6 +214,7 @@ class BWMember(BWObject):
             self.optional = optional
         elif default is not NOT_FOUND or builder:
             self.optional = True
+        self.extend = extend
 
     def __bindclass__(self, cls, name):
         p = BWMemberProperty(self.get_reader(cls, name),
@@ -195,13 +222,14 @@ class BWMember(BWObject):
                              self.get_deleter(cls, name))
         p.__initobj__ = self.__initobj__
         p.__name__ = name
+        p.__member__ = self
         members = cls.__dict__.get('__bwmembers__')
         if members is None:
             members = []
             for base in cls.__bases__:
                 members.extend(getattr(base, '__bwmembers__', ()))
-            members = tuple(members)
-        cls.__bwmembers__ = (p,) + members
+        cls.__bwmembers__ = (p,) + \
+                            tuple(m for m in members if m.__name__ != name)
         if not self.optional:
             required = cls.__dict__.get('__required__')
             if required is None:
@@ -332,8 +360,52 @@ class BWMember(BWObject):
             # I would personally prefer to make "del x.y" an error-free op.
             return lambda o: self.__dict__.pop((name,))
 
+class Extender(BWObject):
+    def __init__(_self, *_args, **_kw):
+        _self._args = _args
+        _self._kw = _kw
+
+    def __bindclass__(self, cls, name):
+        super_value = NOT_FOUND
+        for base in cls.__mro__[1:]:
+            super_value = base.__dict__.get(name, NOT_FOUND)
+            if super_value is not NOT_FOUND:
+                break
+        return self.extend(cls, name, super_value, *self._args, **self._kw)
+
+    def extend(self, cls, name, sv):
+        return sv
+
+class StringExtender(Extender):
+    def extend(self, cls, name, sv, chopleft=0, chopright=None,
+                                    prefix='', suffix=''):
+        if chopright:
+            chopright = -chopright
+        else:
+            chopright = None
+        return prefix + str(sv)[chopleft:chopright] + suffix
+
+class MemberExtender(Extender):
+    def extend(self, cls, name, sv, *_args, **_kw):
+        isa = _args or '*'
+        checks = []
+        for item in isa:
+            if item == '*':
+                checks.extend(sv.__member__.isa)
+            else:
+                checks.append(item)
+        kw = dict(sv.__member__._kw, **_kw)
+        kw.pop('extend', None)
+        return type(sv.__member__)(*checks, **kw).__bindclass__(cls, name)
+
 def member(*_args, **_kw):
     return BWMember(*_args, **_kw)
+
+def extend(*_args, **_kw):
+    return MemberExtender(*_args, **_kw)
+
+def extend_str(*_args, **_kw):
+    return StringExtender(*_args, **_kw)
 
 def into(_converter, *_isa):
     def converter(_s, _n, _v):

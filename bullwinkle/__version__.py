@@ -17,10 +17,13 @@ LICENSE_INFO = 'Run python -m bullwinkle.LICENSE for license text'
 CHANGELOG_INFO = 'Run python -m bullwinkle.__changelog__ for full log'
 
 __author__ = AUTHOR
+__author_email__ = AUTHOR_EMAIL
 __version__ = VERSION
-__all__ = ['LICENSE', 'AUTHOR', 'AUTHOR_EMAIL',
-           'VERSION', 'PROJECT', 'LICENSE_INFO',
-           'CHANGELOG_INFO', '__author__', '__version__']
+__all__ = ['LICENSE', 'LICENSE_INFO',
+           'AUTHOR', 'AUTHOR_EMAIL',
+           'VERSION', 'PROJECT', '__version__',
+           'CHANGELOG', 'CHANGELOG_INFO',
+           '__author__', '__author_email__']
 
 if __name__ == '__main__':
     shvar = PROJECT.replace('-', '_').replace(' ', '_').lower()
