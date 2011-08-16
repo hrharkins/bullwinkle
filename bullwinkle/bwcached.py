@@ -301,20 +301,16 @@ def classcachedmethod(fn, Volailte=Volatile):
         obj = fn(target)
         if type(obj) is not Volatile:
             if isinstance(obj, classmethod):
-                print >>sys.stderr, 'GETTING', obj
                 obj = obj.__get__(cls)
             elif not isinstance(obj, MethodType):
-                print >>sys.stderr, 'BINDING', obj
                 obj = classmethod(obj).__get__(cls)
             setattr(target, name, obj)
             return obj
         else:
             obj = obj.obj
             if isinstance(obj, classmethod):
-                print >>sys.stderr, 'v-GETTING', obj
                 obj = obj.__get__(cls)
             elif not isinstance(obj, MethodType):
-                print >>sys.stderr, 'v-BINDING', obj
                 obj = MethodType(obj, cls, type(cls))
             return obj
     cls = type(fn.__name__,
