@@ -8,7 +8,7 @@ import doctest
 
 if __name__ == '__main__':
     import bwversion, bwobject, bwmethod, bwcontext
-    import bwcached, bwmember, bwthrowable, bwconvertable
+    import bwcached, bwmember, bwthrowable#, bwconvertable
     doctest.testmod(bwversion)
     doctest.testmod(bwobject)
     doctest.testmod(bwmethod)
@@ -16,5 +16,5 @@ if __name__ == '__main__':
     doctest.testmod(bwcached)
     doctest.testmod(bwmember)
     doctest.testmod(bwthrowable)
-    doctest.testmod(bwconvertable)
+    #doctest.testmod(bwconvertable)
 
