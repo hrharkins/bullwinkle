@@ -42,16 +42,17 @@ Each entry can be one of:
     works well here).
 
 >>> class Car(BWObject):
-...     color = member('BLUE', 'RED', 'BLACK')
+...     color = member('BLUE', 'RED', 'BLACK', None)
+...     tires = member(int, lambda v, s: v == 'FOUR', default=4)
 ...
 >>> Car(color='BLUE')
-Car(color='BLUE')
->>> Car(color='BLACK')
-Car(color='BLACK')
+Car(color='BLUE', tires=4)
+>>> Car(color='BLACK', tires='FOUR')
+Car(color='BLACK', tires='FOUR')
 >>> Car(color='WHITE')
 Traceback (most recent call last):
     ...
-TypeError: color ('WHITE') must be one of: ('BLUE', 'RED', 'BLACK')
+TypeError: color ('WHITE') must be one of: ('BLUE', 'RED', 'BLACK', None)
 
 =======================
 === Type conversion ===
@@ -74,6 +75,17 @@ receives an int (but not a string).  If only one positional argument is
 provided to into(), then any type will be converted using the converter
 function.  Conversion will not occur if the object is already of the type
 specified.
+
+Type conversion can also be attempted for all object types:
+
+>>> def namer(o):
+...     return 'Denizen<%s>' % o
+...
+>>> class Denizen(BWObject):
+...     name = member(str, into(namer))
+...
+>>> Denizen(name=4)
+Denizen(name='Denizen<4>')
 
 ======================
 === Default values ===
@@ -99,17 +111,28 @@ appropriate.
 
 >>> import hashlib
 >>> class DBConnection(BWObject):
-...     username = member(str, default='nobody')
+...     dbname = member(str)
+...     username = member(str, default=lambda o, n: o.dbname)
 ...     password = member(str, default='nobody', builder='makepw')
+...     cursors = member(list, default=list)
+...     host = member(str, builder='get_host')
 ...
 ...     def makepw(self, pw):
 ...         return hashlib.sha1(pw).digest()
 ...
->>> conn = DBConnection()
+>>> conn = DBConnection(dbname='testdb')
+>>> conn.dbname
+'testdb'
 >>> conn.username
-'nobody'
+'testdb'
+>>> conn.cursors
+[]
 >>> print conn.password
 6^\xc1zg_2s\xbc\x16\xc7Ga\xad\x83\xf2\xcf\x07\xc5\x9a
+>>> conn.host
+Traceback (most recent call last):
+    ...
+TypeError: 'DBConnection' has no builder method 'get_host'
 
 =========================
 === Read-Only Members ===
@@ -153,7 +176,16 @@ IMPORTANT: Optional members that do not have default/builder settings can
 >>> p = Point()
 Traceback (most recent call last):
     ...
-TypeError: x, y need to be specified when constructing Point.
+TypeError: 'x', 'y' needs to be specified when constructing 'Point'.
+
+>>> class Circle(Point):
+...     radius = member(int, optional=True)
+...
+>>> c = Circle(1, 2)
+>>> c.radius
+Traceback (most recent call last):
+    ...
+AttributeError: radius
 
 ====================================
 === Extending superclass members ===
@@ -202,7 +234,7 @@ class BWMember(BWObject):
         self._kw = _kw
         self.init(**_kw)
 
-    def init(self, ro=None, default=NOT_FOUND, extend=False,
+    def init(self, ro=None, default=NOT_FOUND,
                    optional=None, builder=None):
         if ro is not None:
             self.ro = ro
@@ -214,7 +246,6 @@ class BWMember(BWObject):
             self.optional = optional
         elif default is not NOT_FOUND or builder:
             self.optional = True
-        self.extend = extend
 
     def __bindclass__(self, cls, name):
         p = BWMemberProperty(self.get_reader(cls, name),
@@ -223,22 +254,9 @@ class BWMember(BWObject):
         p.__initobj__ = self.__initobj__
         p.__name__ = name
         p.__member__ = self
-        members = cls.__dict__.get('__bwmembers__')
-        if members is None:
-            members = []
-            for base in cls.__bases__:
-                members.extend(getattr(base, '__bwmembers__', ()))
-        cls.__bwmembers__ = (p,) + \
-                            tuple(m for m in members if m.__name__ != name)
+        cls.__addmember__(name)
         if not self.optional:
-            required = cls.__dict__.get('__required__')
-            if required is None:
-                required = []
-                for base in cls.__bases__:
-                    required.extend(getattr(base, '__required__', ()))
-                required = tuple(required)
-            required += (name,)
-            cls.__required__ = sorted(required)
+            cls.__require__(name)
         return p
 
     @cachedmethod
@@ -254,7 +272,12 @@ class BWMember(BWObject):
         src = '\n'.join(src)
         #print >>sys.stderr, src
         #print >>sys.stderr, lv
-        exec src in lv
+        try:
+            exec src in lv
+        except:         # Debug
+            print >>sys.stderr, "Source:"
+            print >>sys.stderr, src
+            raise
         checker = lv.pop('checker')
         checker.__src__ = src
         checker.__isa__ = isa
@@ -280,7 +303,9 @@ class BWMember(BWObject):
                         src.append(indent + '    _nv = %s(_s, _n, _v)' % name)
                         src.append(indent + '    if _nv is not NOT_FOUND:')
                         src.append(indent + '        return (_nv,)')
-                        src.append(indent + 'except:')
+                        src.append(indent + 'except TypeError:')
+                        src.append(indent + '    pass')
+                        src.append(indent + 'except ValueError:')
                         src.append(indent + '    pass')
                     tc = getattr(check, '__type__', None)
                     if tc is not None:
@@ -289,12 +314,8 @@ class BWMember(BWObject):
                         src.append(indent +
                                    'if isinstance(_v, %s):' % tname)
                         src.append(indent + '    return True')
-                        src.append(indent + 'else:')
-                        sindent = indent + '    '
-                    else:
-                        sindent = indent
                     if allowed:
-                        self.build_checker_src(allowed, fn_op, src, lv, sindent)
+                        self.build_checker_src(allowed, fn_op, src, lv, indent)
                     else:
                         fn_op(src, lv, indent)
                 else:
@@ -308,6 +329,7 @@ class BWMember(BWObject):
         return src, lv
 
     def __initobj__(self, obj, name, value, NOT_FOUND=NOT_FOUND):
+        ovalue = value
         res = self.checkset(name, value)
         while type(res) is tuple:
             value = res[0]
@@ -315,8 +337,12 @@ class BWMember(BWObject):
         if res:
             obj.__dict__[name,] = value
         else:
-            raise TypeError('%s (%r) must be one of: (%s)'
-                            % (name, value, ', '.join(map(repr, self.isa))))
+            raise TypeError('%s (%s) must be one of: (%s)'
+                            % (name,
+                               '%r => %r' % (ovalue, value)
+                                    if value is not ovalue
+                                    else repr(ovalue),
+                               ', '.join(map(repr, self.isa))))
 
     def get_reader(self, cls, name, NOT_FOUND=NOT_FOUND):
         def reader(o):
@@ -337,7 +363,7 @@ class BWMember(BWObject):
                     fn = getattr(o, builder, None)
                     if fn is None:
                         raise TypeError('%r has no builder method %r' %
-                                        (self, builder))
+                                        (type(o).__name__, builder))
                     else:
                         obj = fn(default)
                 if isinstance(obj, type) and issubclass(obj, Exception):
@@ -353,14 +379,66 @@ class BWMember(BWObject):
             return lambda o, v: self.__initobj__(o, name, v)
 
     def get_deleter(self, cls, name):
+        '''
+        >>> class MyObject(BWObject):
+        ...     x = member(int)
+        ...
+        >>> obj = MyObject(x=5)
+        >>> obj.x
+        5
+        >>> del obj.x
+        >>> obj.x
+        Traceback (most recent call last):
+            ...
+        AttributeError: x
+        >>> del obj.x
+        Traceback (most recent call last):
+            ...
+        AttributeError: x
+        '''
         if self.ro:
             return None
         else:
             # XXX: Should we just default to no-op instead when not found?
             # I would personally prefer to make "del x.y" an error-free op.
-            return lambda o: self.__dict__.pop((name,))
+            def deleter(o, name=name, NOT_FOUND=NOT_FOUND):
+                if o.__dict__.pop((name,), NOT_FOUND) is NOT_FOUND:
+                    raise AttributeError(name)
+            return deleter
 
 class Extender(BWObject):
+    '''
+    Base class for extension members.  The base class is a no-op but
+    subclasses can overload extend() to do more complicated tasks:
+
+    >>> class HelloBase(BWObject):
+    ...     hello = 'world'
+    ...
+    >>> class NoOperationSubclass(HelloBase):
+    ...     hello = Extender()
+    ...
+    >>> class QuoteExtender(Extender):
+    ...     def extend(self, cls, name, sv):
+    ...         return repr(str(sv))
+    ...
+    >>> class QuoteSubclass(HelloBase):
+    ...     hello = QuoteExtender()
+    ...
+    >>> print NoOperationSubclass().hello
+    world
+    >>> print QuoteSubclass().hello
+    'world'
+
+    An extrended attribute must exist in the base class.
+
+    >>> class NotFound(HelloBase):
+    ...     world = Extender()
+    ...
+    Traceback (most recent call last):
+        ...
+    TypeError: Cannot extend 'world': not in base classes of 'NotFound'
+    '''
+
     def __init__(_self, *_args, **_kw):
         _self._args = _args
         _self._kw = _kw
@@ -371,12 +449,35 @@ class Extender(BWObject):
             super_value = base.__dict__.get(name, NOT_FOUND)
             if super_value is not NOT_FOUND:
                 break
+        if super_value is NOT_FOUND:
+            raise TypeError('Cannot extend %r: not in base classes of %r'
+                            % (name, cls.__name__))
         return self.extend(cls, name, super_value, *self._args, **self._kw)
 
     def extend(self, cls, name, sv):
         return sv
 
 class StringExtender(Extender):
+    '''
+    Manipulates base class string members.  This has a shortcut
+    "extend_str".
+
+    >>> class HelloBase(BWObject):
+    ...     hello = 'world'
+    ...
+    >>> class Extended(HelloBase):
+    ...     hello = extend_str(chopleft=1, chopright=1,
+    ...                        prefix='<', suffix='>')
+    ...
+    >>> class Extended2(HelloBase):
+    ...     hello = extend_str(prefix='<', suffix='>')
+    ...
+    >>> print Extended().hello
+    <orl>
+    >>> print Extended2().hello
+    <world>
+    '''
+
     def extend(self, cls, name, sv, chopleft=0, chopright=None,
                                     prefix='', suffix=''):
         if chopright:
@@ -386,6 +487,30 @@ class StringExtender(Extender):
         return prefix + str(sv)[chopleft:chopright] + suffix
 
 class MemberExtender(Extender):
+    '''
+    Modifies the arguments provided to a base class member declaration.
+    This makes it possible to semi-anonymously modify base class memebr
+    definitions without having to redefine the entire member specification.
+    The "extend" shortcut references this class.
+
+    When constructing the ISA specificaiton, '*' can be used to determine
+    where the base class ISA should go.  Omitting all ISA items will
+    default to including all base class ISA.
+
+    >>> class MyBase(BWObject):
+    ...     test = member(int, default=0)
+    ...
+    >>> class Subclass(MyBase):
+    ...     test = extend('*', float, optional=False, default=NOT_FOUND)
+    ...
+    >>> print MyBase().test
+    0
+    >>> print Subclass().test
+    Traceback (most recent call last):
+        ...
+    TypeError: 'test' needs to be specified when constructing 'Subclass'.
+    '''
+
     def extend(self, cls, name, sv, *_args, **_kw):
         isa = _args or '*'
         checks = []

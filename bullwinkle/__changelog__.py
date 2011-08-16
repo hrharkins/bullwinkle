@@ -27,6 +27,12 @@ CHANGELOG = ChangeLog(
     Version('0.3.2',
         'Added contexts',
         ),
+    Version('0.3.3',
+        'Added greater support for code coverage',
+        'Fixed numerous bugs via code coverage'
+        ),
+    Version('0.3.4',
+        ),
 )
 
 __doc__ += '\n' + str(CHANGELOG)

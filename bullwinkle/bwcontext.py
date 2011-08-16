@@ -20,6 +20,8 @@ information in it:
 ...             ctx.roles[role] = True
 ...
 >>> rootctx = BWContext('rootctx')
+>>> rootctx
+<rootctx>
 >>> rootctx.user = User(username='superman', roles=('hero', 'flying'))
 >>> rootctx.user
 <rootctx.user => User(roles=('hero', 'flying'), username='superman')>
@@ -34,7 +36,7 @@ In this example, we define a class to contain a user record, attach it to
 a context, and access the user roles via the context's reference operator
 (+).  There are two operators available to dereference context lookups:
 
- * + (plus) will throw a KeyError if the path does not exist
+ * + (plus) will raise a KeyError if the path does not exist
 
  * - (minus) will return None if the path does not exist
 
@@ -60,7 +62,25 @@ True
 
 Although tempting, there is no automatic conversion of references into
 objects in the presence of operators (like add, sub, etc).  This is to
-provide a uniform approach to accessing referenced items.
+provide a uniform approach to accessing referenced items.  The only
+exception to this is the power operator due to order of precedence:
+
+>>> ctx = BWContext('temp')
+>>> ctx.x = 5
+>>> ctx.x ** 2
+25
+
+No special oeprators are needed for setting or deleting though.  When
+referencing attributes, only one segment is attached at a time.  When
+referencing by item, the path may include '.' separators:
+
+>>> ctx = BWContext('testctx')
+>>> ctx.test.it = 5
+>>> del ctx.test.it
+>>> ctx.test['hello.world'] = 'something'
+>>> ctx.test['hello.world']
+<testctx.test.hello.world => 'something'>
+>>> del ctx.test['hello.world']
 
 Subcontexting is a simple matter of using the base context in the
 consturctor of another context.  For our example, let's change the
@@ -95,6 +115,75 @@ True
 True
 >>> bool(-comboctx.user.roles.flying)
 False
+
+>>> root = BWContext('root', x='root_x')
+>>> left = BWContext('left', root, y='left_y')
+>>> left2 = BWContext(None, left)
+>>> right = BWContext('right', root, y='right_y')
+>>> bottom = BWContext('bottom', left2, right, y='sub_y')
+>>> bottom.x
+<bottom.x => 'root_x'>
+>>> left2.x
+<left{1}.x => 'root_x'>
+>>> bottom.a
+<bottom.a => :missing:>
+
+Contexts can are BWThrowables (see bwthrowable) and can be retrieved via
+BWContext.CURRENT:
+
+>>> rootctx.throw()
+>>> BWContext.CURRENT is rootctx
+True
+
+To create a new context based on the the current context, create a
+BWContext with no name:
+
+>>> +BWContext(None).user
+User(roles=('hero', 'flying'), username='superman')
+
+Context variables can also be established at construction time.  If the
+name has double-underscores, they will be converted to '.' characters.
+
+>>> ctx = BWContext(None, user__roles__hello='world')
+>>> +ctx.user.roles.hello
+'world'
+
+References can also be made in an unbound manner by referencing a context
+class:
+
+>>> user = BWContext.user
+>>> roles = BWContext['user.roles']
+
+These can then be dereferences against a context by calling the references
+with the binding context:
+
+>>> user
+<user>
+>>> +user(rootctx)
+User(roles=('hero', 'flying'), username='superman')
+>>> +user.roles(rootctx)
+('hero', 'flying')
+>>> +user['roles.flying'](rootctx)
+True
+>>> +user
+Traceback (most recent call last):
+    ...
+KeyError: 'user'
+
+Only contexts may be dereferenced in this way:
+
+>>> +user(None)
+Traceback (most recent call last):
+    ...
+TypeError: Unbound ref requires a context
+
+Deleting context variables has the effect of masking base context
+declarations:
+
+>>> ctx = BWContext(None)
+>>> del ctx.user
+>>> print -ctx.user
+None
 '''
 
 from __version__ import *
@@ -209,7 +298,7 @@ class BWContext(BWThrowable):
     def get(self, key, default=None, NOT_FOUND=NOT_FOUND, DELETED=DELETED):
         obj = self._ref.get(key, NOT_FOUND)
         if obj is NOT_FOUND:
-            for ref in self._bro:
+            for ref in self._bro:   # pragma: no partial
                 obj = ref.get(key, NOT_FOUND)
                 if obj is not NOT_FOUND:
                     break
@@ -253,6 +342,16 @@ class BWContext(BWThrowable):
         self._storage[key] = DELETED
 
     def property(self, fn):
+        '''
+        Declares the function to be a context property (it will be called
+        when referenced).
+
+        >>> ctx = BWContext('test')
+        >>> ctx.fn = ctx.property(lambda c: 'hello')
+        >>> ctx.fn
+        <test.fn => 'hello'>
+        '''
+
         fn.__ctxproperty__ = True
         return fn
 
@@ -274,7 +373,7 @@ class BWContextRef(BWObject):
         return self._self()
 
     def __pow__(self, other):
-        return +self ** other
+        return self._self() ** other
 
     def _self(self, default=None):
         return default
@@ -314,7 +413,10 @@ class BWBoundContextRef(BWContextRef):
         return self._ctx.get(self._path, default)
 
     def __repr__(self):
-        return '<%s.%s => %s>' % (self._ctx._name, self._path, +self)
+        value = ~self
+        return '<%s.%s => %s>' % (self._ctx._name, self._path,
+                                  ':missing:' if value is type(None)
+                                                else repr(value))
 
 class BWUnboundContextRef(BWContextRef):
     def __init__(self, path):

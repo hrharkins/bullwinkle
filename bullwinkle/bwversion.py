@@ -8,12 +8,48 @@ can then be printed easily.
 
 class Version(tuple):
     '''
+    Manages a version number and associated changes.
+
     >>> Version(0.1)
     0.1
     >>> Version('0.1.2')
     0.1.2
     >>> Version('0.1.2') > Version('0.1')
     True
+
+    Giving Version None or another Version will simply return the passed
+    value:
+
+    >>> Version(None)
+    >>> v = Version(0.5)
+    >>> Version(v) is v
+    True
+
+    Versions can be freely converted to strings:
+
+    >>> v = Version(0.5)
+    >>> str(v)
+    '0.5'
+    >>> 'v' + v
+    'v0.5'
+    >>> v + ' (version)'
+    '0.5 (version)'
+    >>> Version(0.5) + (1,)
+    0.5.1
+    >>> (0, 5) + Version(1)
+    0.5.1
+
+    Special care must be given to % formatting as Version objects are
+    actually tuples:
+
+    >>> 'Version %s' % v
+    Traceback (most recent call last):
+        ...
+    TypeError: not all arguments converted during string formatting
+    >>> 'Version %s' % str(v)
+    'Version 0.5'
+    >>> 'Version %s' % (v,)
+    'Version 0.5'
     '''
 
     def __new__(cls, src, *changes):
@@ -38,16 +74,16 @@ class Version(tuple):
         if isinstance(other, basestring):
             return str(self) + other
         else:
-            return super(Version, self).__add__(other)
+            return type(self)(super(Version, self).__add__(other))
 
     def __radd__(self, other):
         if isinstance(other, basestring):
             return other + str(self)
         else:
-            return other.__add__(self)
+            return Version(other.__add__(self))
 
     def __str__(self):
-        return '.'.join(self)
+        return '.'.join(map(str, self))
     __repr__ = __str__
 
 class ChangeLog(tuple):

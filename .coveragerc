@@ -1,0 +1,19 @@
+[run]
+branch = True
+timid = True
+
+[report]
+exclude_lines =
+    if 0:
+    # Debug
+    # pragma: no cover
+
+partial_branches =
+    # There will always at least be one frame or we would have blown up:
+    while f is not None:
+
+    # There will always at least be one base (the class itself):
+    for base in cls.__mro__:
+
+    # pragma: no partial
+

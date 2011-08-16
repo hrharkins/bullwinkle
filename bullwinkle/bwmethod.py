@@ -11,6 +11,49 @@ from __version__ import *
 from bwobject import BWObject
 
 class MethodBuilder(BWObject):
+    '''
+    Base class for any method building application (including the *_super
+    methods of this module).  This works by creating Python code on-the-fly
+    to try to offset some of the performance cost of using *_super methods.
+
+    The base class accepts keyword arguments and passes them to __init__.
+    The base class will handle:
+
+     * require_base -- True if a base class member must exist (default
+        True)
+
+    * want_args -- True if the subclass function wants the arguments
+        (default True)
+
+     * want_result -- True if the subclass function was the result from
+        the base class call as the first non-self argument (default True)
+
+     * can_override -- True if a return value from the subclass function
+        will short-circuit and/or override the base class result (default
+        False)
+
+    These are all definable in the class attributes and the constructor:
+
+    >>> class MyObject(BWObject):
+    ...     @before_super(require_base=False,
+    ...                   want_result=True,
+    ...                   can_override=True)
+    ...     def no_base_required(self, res):
+    ...         return 'Hello'
+    ...
+
+    This class must be overloaded to be used:
+
+    >>> class MyObject(BWObject):
+    ...     @MethodBuilder
+    ...     def no_way(self):
+    ...         pass
+    ...
+    Traceback (most recent call last):
+        ...
+    NotImplementedError: No encode defined for MethodBuilder()
+    '''
+
     require_base = True
     want_args = True
     want_result = False
@@ -265,6 +308,10 @@ filter_super = FilterSuperMethodBuilder
 
 class AroundSuperMethodBuilder(SuperMethodBuilder):
     '''
+    Provides the bound superclass function as an argument to the method.
+    This allows the method to do things before and after the superclass
+    method is called.
+
     >>> class Base(BWObject):
     ...     def fn(self, x):
     ...         return x ** 2
@@ -282,6 +329,39 @@ class AroundSuperMethodBuilder(SuperMethodBuilder):
     25
     >>> s.fn(5)
     143
+
+    The method cannot ask for the result (since the superclass method is
+    not called prior to calling the subclass method) nor can it override
+    (since its result is always accepted):
+
+    >>> class BadClass(BWObject):
+    ...     @around_super(want_result=True)
+    ...     def no_good(self):
+    ...         pass
+    ...
+    Traceback (most recent call last):
+        ...
+    TypeError: Cannot get base result in around methods
+
+    >>> class BadClass(BWObject):
+    ...     @around_super(can_override=True)
+    ...     def no_good(self):
+    ...         pass
+    ...
+    Traceback (most recent call last):
+        ...
+    TypeError: Overrides are meaningless in around methods
+
+    However, it is possible to indicate that the base method is not
+    required:
+
+    >>> class HandleNullBase(BWObject):
+    ...     @around_super(require_base=False)
+    ...     def take_it_or_leave_it(self, super_fn):
+    ...         if super_fn is not None:
+    ...             # Do base class stuff optionally.
+    ...             super_fn()
+    ...         # Carry on...
     '''
 
     want_result = False
@@ -314,5 +394,40 @@ class AroundSuperMethodBuilder(SuperMethodBuilder):
 around_super = AroundSuperMethodBuilder
 
 def override_result(v, type_none=type(None)):
+    '''
+    Methods that return overrides cannot simply return None since that is
+    what non-return-value methods also return.  As a result, if a subclass
+    method wants to return None, it must return type(None) instead.  To
+    avoid having to do that check manually, override_result can come to the
+    rescue:
+
+    >>> class Baseclass(BWObject):
+    ...     def sometimes_override(self):
+    ...         return 'Hello'
+    ...
+    ...     def always_override(self):
+    ...         return 'World'
+    ...
+    >>> class Overrider(Baseclass):
+    ...     def __init__(self, value):
+    ...         self.value = value
+    ...
+    ...     @before_super
+    ...     def sometimes_override(self):
+    ...         return self.value
+    ...
+    ...     @before_super
+    ...     def always_override(self):
+    ...         return override_result(self.value)
+    ...
+    >>> print Overrider('something').sometimes_override()
+    something
+    >>> print Overrider('something').always_override()
+    something
+    >>> print Overrider(None).sometimes_override()
+    Hello
+    >>> print Overrider(None).always_override()
+    None
+    '''
     return type_none if v is None else v
 

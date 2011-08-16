@@ -49,16 +49,55 @@ optional if the key name is a simple string:
 >>> catcher('x')
 7
 
+=================================
+=== The TC Throw-Catch object ===
+=================================
+
 A special singleton global, "TC." is available to streamline this further.
 Anything assiged to TC, by attribute or item, is thrown().  Anything
 accessed via TC, by attribute or item, is catch()'ed:
 
 >>> def catcher(name):
-...     print TC[name]
+...     return TC[name]
 ...
 >>> TC.x = 5
 >>> catcher('x')
 5
+>>> TC['y'] = 7
+>>> catcher('y')
+7
+
+>>> class MyThrowable(BWThrowable):
+...     pass
+...
+>>> rug = MyThrowable()
+>>> rug.throw()
+>>> catcher(MyThrowable) is rug
+True
+
+==========================
+=== Handling not found ===
+==========================
+
+catch() will return a default value if the key is not found on the stack:
+
+>>> print catch('xyz', 'NOT HERE')
+NOT HERE
+
+BWThrowable, however, has several mix-ins that can alter the resulting in
+the case of a catch() miss:
+
+>>> print type(BWAutoThrowable.catch()).__name__
+BWAutoThrowable
+>>> print BWErrorThrowable.catch()
+Traceback (most recent call last):
+    ...
+BWThrowableNotFoundError
+
+The default BWThrowable will simply return None if not found:
+
+>>> print BWThrowable.catch()
+None
 '''
 
 from __version__ import *
@@ -101,23 +140,28 @@ class BWThrowable(object):
             return cls.uncaught()
 
     @classmethod
-    def uncaught(cls):
-        return cls()
-
-    class DefaultNone(object):
-        @classmethod
-        def uncaught(self):
-            return None
-
-    class DefaultError(object):
-        error_type = BWThrowableNotFoundError
-
-        @classmethod
-        def uncaught(cls):
-            raise error_type(cls)
+    def uncaught(self):
+        return None
 
     def __exit__(self, *_args):
         pass
+
+class BWAutoThrowable(BWThrowable):
+    @classmethod
+    def uncaught(cls):
+        args, kw = cls.get_auto_args()
+        return cls()
+
+    @classmethod
+    def get_auto_args(self):
+        return (), {}
+
+class BWErrorThrowable(BWThrowable):
+    error_type = BWThrowableNotFoundError
+
+    @classmethod
+    def uncaught(cls):
+        raise cls.error_type(cls)
 
 class BWThrowCatch(object):
     def __getitem__(self, key):
