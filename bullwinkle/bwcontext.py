@@ -24,7 +24,7 @@ information in it:
 <rootctx>
 >>> rootctx.user = User(username='superman', roles=('hero', 'flying'))
 >>> rootctx.user
-<rootctx.user => User(roles=('hero', 'flying'), username='superman')>
+<rootctx/user => User(roles=('hero', 'flying'), username='superman')>
 >>> 'hero' in +rootctx.user.roles
 True
 >>> -rootctx.user.roles.hero
@@ -60,6 +60,79 @@ is:
 >>> ~rootctx.var is type(None)
 True
 
+Attribute-based variables cannot begin with an underbar.  Those are
+reserved for BWContext internal variables.
+
+>>> rootctx._something
+Traceback (most recent call last):
+    ...
+AttributeError: _something
+
+=======================
+=== Naming Contexts ===
+=======================
+
+Every context has a name, though in many cases it is inherited from the
+parent objects.  The first argument to BWContext's constructor may be the
+name which must be either None (for anonymous subcontexts) or a string.
+This ensures that some lineage can be maintained for debugging:
+
+>>> root = BWContext('root')
+>>> BWContext(BWContext(BWContext(root)))
+<root{3}>
+
+However, a name is required for root contexts:
+
+>>> BWContext()
+Traceback (most recent call last):
+    ...
+TypeError: name must be specified for root contexts
+
+=============================
+=== Referencing Variables ===
+=============================
+
+References can also be made in an unbound manner by referencing a context
+class:
+
+>>> user = BWContext.user
+>>> roles = BWContext['user.roles']
+
+These can then be dereferences against a context by calling the references
+with the binding context:
+
+>>> user
+<*BWContext/user>
+>>> +(rootctx/user)
+User(roles=('hero', 'flying'), username='superman')
+>>> +(rootctx/user.roles)
+('hero', 'flying')
+>>> +(rootctx/user['roles.flying'])
+True
+>>> +user
+Traceback (most recent call last):
+    ...
+KeyError: 'user'
+
+Only contexts may be dereferenced in this way:
+
+>>> +([]/user)
+Traceback (most recent call last):
+    ...
+TypeError: Ref resolution requires dict, a subclass or instance of BWContext, or None
+
+Requesting a reference of an empty path returns the same subpath:
+
+>>> roles[''] is roles
+True
+>>> bound = rootctx/roles
+>>> bound[''] is bound
+True
+
+========================================
+=== Dereferencing Context References ===
+========================================
+
 Although tempting, there is no automatic conversion of references into
 objects in the presence of operators (like add, sub, etc).  This is to
 provide a uniform approach to accessing referenced items.  The only
@@ -79,19 +152,70 @@ referencing by item, the path may include '.' separators:
 >>> del ctx.test.it
 >>> ctx.test['hello.world'] = 'something'
 >>> ctx.test['hello.world']
-<testctx.test.hello.world => 'something'>
+<testctx/test.hello.world => 'something'>
 >>> del ctx.test['hello.world']
+
+References (both bound and unbound) can be rebound to other contexts
+(including None) using the division operator:
+
+ * None/ref => an unbound ref
+
+    >>> ref = ctx.test
+    >>> None/ref
+    <*BWContext/test>
+
+ * {}/ref => a bound ref to a new context with that dictionary as a base.
+
+   >>> ref = ctx.test
+   >>> dict(test='hello')/ref
+   <dict/test => 'hello'>
+
+ * ctx/ref => a ref bound to that context.  The context must be an instance
+    of the equivalent unbound type of the reference:
+
+    >>> ref = ctx.test
+    >>> other = BWContext('other', test='world')
+    >>> other/ref
+    <other/test => 'world'>
+    >>> class OtherContext(BWContext):
+    ...     pass
+    >>> other = OtherContext('other')
+    >>> oref = other/ref
+    >>> ctx/oref
+    Traceback (most recent call last):
+        ...
+    TypeError: Ref resolution requires dict, a subclass or instance of OtherContext, or None
+
+ * ctxclass/ref => an unbound ref to the context class specified.  The
+    class must be a subclass of the the equivalent unbound type of the
+    reference:
+
+    >>> ref = ctx.test
+    >>> BWContext/ref
+    <*BWContext/test>
+    >>> class OtherContext(BWContext):
+    ...     pass
+    >>> other = OtherContext('other')
+    >>> oref = other/ref
+    >>> BWContext/oref
+    Traceback (most recent call last):
+        ...
+    TypeError: Ref resolution requires dict, a subclass or instance of OtherContext, or None
+
+=====================
+=== Subcontexting ===
+=====================
 
 Subcontexting is a simple matter of using the base context in the
 consturctor of another context.  For our example, let's change the
 contextual user in effect:
 
->>> subctx = BWContext(None, rootctx)
+>>> subctx = BWContext(rootctx)
 >>> subctx.user
-<rootctx{1}.user => User(roles=('hero', 'flying'), username='superman')>
+<rootctx{1}/user => User(roles=('hero', 'flying'), username='superman')>
 >>> subctx.user = User(username='batman', roles=('hero', 'stealthy'))
 >>> subctx.user
-<rootctx{1}.user => User(roles=('hero', 'stealthy'), username='batman')>
+<rootctx{1}/user => User(roles=('hero', 'stealthy'), username='batman')>
 >>> 'stealthy' in +subctx.user.roles
 True
 >>> 'flying' in +subctx.user.roles
@@ -106,9 +230,9 @@ False
 Multiple subcontexting is also legal and follows Python's general rules for
 subclassing:
 
->>> comboctx = BWContext(None, rootctx, subctx)
+>>> comboctx = BWContext(rootctx, subctx)
 >>> comboctx.user
-<rootctx{1},rootctx{2}.user => User(roles=('hero', 'stealthy'), username='batman')>
+<rootctx{1},rootctx{2}/user => User(roles=('hero', 'stealthy'), username='batman')>
 >>> -comboctx.user.roles.hero
 True
 >>> -comboctx.user.roles.stealthy
@@ -118,89 +242,207 @@ False
 
 >>> root = BWContext('root', x='root_x')
 >>> left = BWContext('left', root, y='left_y')
->>> left2 = BWContext(None, left)
+>>> left2 = BWContext(left)
 >>> right = BWContext('right', root, y='right_y')
 >>> bottom = BWContext('bottom', left2, right, y='sub_y')
 >>> bottom.x
-<bottom.x => 'root_x'>
+<bottom/x => 'root_x'>
 >>> left2.x
-<left{1}.x => 'root_x'>
+<left{1}/x => 'root_x'>
 >>> bottom.a
-<bottom.a => :missing:>
+<bottom/a => :missing:>
+
+Contexts can also be created using the call operator() on an existing
+context.  This has the same arguments as the constructor but places the
+called context as the left-most base for the next context.  For example,
+this is equivalent to the above "bottom" case:
+
+>>> bottom = left2('bottom', right, y='sub_y')
+>>> bottom.x
+<bottom/x => 'root_x'>
+
+======================================
+=== Throwing and Catching Contexts ===
+======================================
 
 Contexts can are BWThrowables (see bwthrowable) and can be retrieved via
-BWContext.CURRENT:
+the class property BWContext.CURRENT:
 
 >>> rootctx.throw()
 >>> BWContext.CURRENT is rootctx
 True
 
-To create a new context based on the the current context, create a
-BWContext with no name:
+To create a new context based on the the current context, use the CURRENT
+class property:
 
->>> +BWContext(None).user
+>>> +BWContext.CURRENT().user
 User(roles=('hero', 'flying'), username='superman')
+
+========================
+=== Deep Definitions ===
+========================
 
 Context variables can also be established at construction time.  If the
 name has double-underscores, they will be converted to '.' characters.
 
->>> ctx = BWContext(None, user__roles__hello='world')
+>>> ctx = BWContext.CURRENT(user__roles__hello='world')
 >>> +ctx.user.roles.hello
 'world'
 
-References can also be made in an unbound manner by referencing a context
-class:
+====================
+=== Partial Keys ===
+====================
 
->>> user = BWContext.user
->>> roles = BWContext['user.roles']
+In some caes, a prefix key is used to reference an object (which then might
+perform additional actions on a subkey):
 
-These can then be dereferences against a context by calling the references
-with the binding context:
+>>> ctx = BWContext('test')
+>>> ctx['test.'] = 'hello'
+>>> +ctx.test
+'hello'
+>>> +ctx.test.it
+'hello'
+>>> +ctx.test.it.world
+'hello'
+>>> print -ctx.other
+None
 
->>> user
-<user>
->>> +user(rootctx)
-User(roles=('hero', 'flying'), username='superman')
->>> +user.roles(rootctx)
-('hero', 'flying')
->>> +user['roles.flying'](rootctx)
-True
->>> +user
-Traceback (most recent call last):
-    ...
-KeyError: 'user'
+Partial keys is a way of placign a context inside of another:
 
-Only contexts may be dereferenced in this way:
+>>> mainctx = BWContext('main')
+>>> subctx = BWContext('sub')
+>>> mainctx['sub.'] = subctx
+>>> subctx.hello = 'world'
+>>> mainctx.sub.hello
+<main/sub.hello => 'world'>
 
->>> +user(None)
-Traceback (most recent call last):
-    ...
-TypeError: Unbound ref requires a context
+==========================
+=== Deleting Variables ===
+==========================
 
 Deleting context variables has the effect of masking base context
 declarations:
 
->>> ctx = BWContext(None)
+>>> ctx = BWContext.CURRENT()
 >>> del ctx.user
 >>> print -ctx.user
 None
+
+=======================
+=== Dynamic getters ===
+=======================
+
+The function used to get variables from a storage or reference dictionary
+is controlled by the _getter() method.  This method returns a function or
+method to get the values based on a key and default value.  The base class
+implementation will either:
+
+ * If partial keys are in use in this context, a function that will scan
+    those prefixes if the requested key is not in the passed storage.
+
+ * The .get method of the storage passed.
+
+>>> from bullwinkle import filter_super
+>>> class MyContext(BWContext):
+...     @filter_super
+...     def _getter(self, super_getter, storage):
+...         def getter(key, default=None):
+...             if (isinstance(key, basestring) and
+...                 key.startswith('whole_world.')):
+...                 return 'hello world'
+...             else:
+...                 return super_getter(key, default)
+...         return getter
+...
+>>> ctx = MyContext('test')
+>>> ctx.whole_world
+<test/whole_world => :missing:>
+>>> ctx.whole_world.something
+<test/whole_world.something => 'hello world'>
+>>> sub = BWContext(ctx)
+>>> sub.whole_world.something
+<test{1}/whole_world.something => 'hello world'>
+
+Note that the first example is :missing: because the test is for things
+that start with "whole_world.", not just "whole_world".
+
+Any function can be returned by .getter as long as it accepts a key and a
+default and can have its __self__ attribute assigned (with the underlying
+dictionary).
+
+>>> class BadContext(BWContext):
+...     def _getter(self, storage):
+...         return [].__getitem__
+...
+>>> ctx = BadContext('bad')
+>>> +ctx.test
+Traceback (most recent call last):
+    ...
+TypeError: _getter function's __self__ must be a dict
+>>> sub = BWContext(ctx)
+>>> +sub.test
+Traceback (most recent call last):
+    ...
+TypeError: _getter function's __self__ must be a dict
+
+=========================
+=== _storage and _ref ===
+=========================
+
+Internally, a context flips between _storage and _ref dictionaries
+depending on whether another context is referencing this one.  The current
+state can be tested by examining the context\'s __dict__.  For a new
+context that is unreferenced and has nothing stored, neither _storage nor 
+_ref will be available.
+
+>>> ctx = BWContext('test')
+>>> '_storage' in ctx.__dict__
+False
+>>> '_ref' in ctx.__dict__
+False
+
+>>> ctx.abc = 'abc, rev 1'
+>>> '_storage' in ctx.__dict__
+True
+>>> '_ref' in ctx.__dict__
+False
+
+>>> sub = BWContext(ctx)
+>>> sub.abc
+<test{1}/abc => 'abc, rev 1'>
+>>> '_storage' in ctx.__dict__
+False
+>>> '_ref' in ctx.__dict__
+True
+
+>>> ctx.abc = 'abc, rev 2'
+>>> '_storage' in ctx.__dict__
+True
+>>> '_ref' in ctx.__dict__
+False
+
+>>> ctx.abc
+<test/abc => 'abc, rev 2'>
+>>> sub.abc
+<test{1}/abc => 'abc, rev 1'>
+
 '''
 
 from __version__ import *
 from bwthrowable import BWThrowable
 from bwcached import cached
 from bwobject import BWObject
-import sys
+import sys, traceback
 
 NOT_FOUND = type(None)
 DELETED = KeyError
 
 class BWContextMeta(getattr(BWThrowable, '__metaclass__', type)):
     def __getattr__(cls, name):
-        return BWUnboundContextRef(name.replace('__', '_'))
+        return BWUnboundContextRef(cls, name.replace('__', '_'))
 
     def __getitem__(cls, key):
-        return BWUnboundContextRef(key)
+        return BWUnboundContextRef(cls, key)
 
     @property
     def CURRENT(cls):
@@ -208,30 +450,30 @@ class BWContextMeta(getattr(BWThrowable, '__metaclass__', type)):
 
 class BWContext(BWThrowable):
     __metaclass__ = BWContextMeta
-    _ctxname = None
+    _varkeys = ()
 
-    def __init__(_self, _name, *_basectx, **_kw):
-        if not _name and not _basectx:
-            _basectx = (None,)
-        _self.__dict__['_basectx'] = \
-            tuple(_self.catch() if base is None else base
-                  for base in _basectx)
-        if _name is not None:
-            _self.__dict__['_ctxname'] = _name
-            _self.__dict__['_names'] = (_name,)
-            _self.__dict__['_depths'] = (0,)
+    def __init__(_self, _name=None, *_basectx, **_kw):
+        if isinstance(_name, basestring):
+            _self.__dict__.update(_name = _name, _names = (_name,),
+                                                 _depths = (0,))
+        elif _name is not None:
+            _basectx = (_name,) + _basectx
+        _self.__dict__['_basectx'] = _basectx
+        if not _basectx and _self.__dict__.get('_name') is None:
+            raise TypeError('name must be specified for root contexts')
         if _kw:
-            for name, value in _kw.iteritems():
-                _self[name.replace('__', '.')] = value
+            for key, value in _kw.iteritems():
+                # Init arguments must be strings or Python raises a
+                # TypeError.
+                _self[key.replace('__', '.')] = value
+
+    def __call__(_self, _name=None, *_others, **_kw):
+        return type(_self)(_name, _self, *_others, **_kw)
 
     @cached
     def _name(self):
-        name = self._ctxname
-        if name:
-            return name
-        else:
-            return ','.join('%s{%d}' % (name, depth)
-                            for name, depth in zip(self._names, self._depths))
+        return ','.join('%s{%d}' % (name, depth)
+                        for name, depth in zip(self._names, self._depths))
 
     @cached
     def _names(self):
@@ -248,20 +490,76 @@ class BWContext(BWThrowable):
         return result
 
     @cached
+    def _getters(self):
+        if '_ref' in self.__dict__:
+            return (self._ref_getfn,) + self._bro
+        else:
+            # We will invoke storage here to make sure a _getter of some
+            # kind is created.
+            return (self._storage_getfn,) + self._bro
+
+    @cached
     def _storage(self):
         ref = self.__dict__.pop('_ref', None)
+        self.__dict__.pop('_getters', None)
         if ref is None:
             return {}
         else:
+            self.__dict__.pop('_ref_getfn', None)
             return dict(ref)
+
+    @cached
+    def _storage_getfn(self):
+        storage = self._storage
+        fn = self._getter(storage)
+        if not hasattr(fn, '__self__'):
+            fn.__self__ = storage
+        elif not isinstance(fn.__self__, dict):
+            raise TypeError('_getter function\'s __self__ must be a dict')
+        return fn
 
     @cached
     def _ref(self):
         storage = self.__dict__.pop('_storage', None)
+        self.__dict__.pop('_getters', None)
         if storage is None:
             return {}
         else:
+            self.__dict__.pop('_storage_getfn', None)
             return storage
+
+    @cached
+    def _ref_getfn(self):
+        ref = self._ref
+        fn = self._getter(ref)
+        if not hasattr(fn, '__self__'):
+            fn.__self__ = ref
+        elif not isinstance(fn.__self__, dict):
+            raise TypeError('_getter function\'s __self__ must be a dict')
+        return fn
+
+    def _getter(self, storage):
+        varkeys = self._varkeys
+        if len(varkeys):
+            def getter(key, default=None, NOT_FOUND=NOT_FOUND,
+                            self=self, varkeys=varkeys, storage=storage):
+                obj = storage.get(key, NOT_FOUND)
+                subkey = None
+                if obj is NOT_FOUND:
+                    # We've already tested for at least one varkey.
+                    for prefix, value in varkeys: # pragma: no partial
+                        if key.startswith(prefix):
+                            obj = value
+                            subkey = key[len(prefix):]
+                            break
+                    else:
+                        obj = default
+                if getattr(obj, '__ctxproperty__', False):
+                    obj = obj.__ctxproperty__(self, subkey, default)
+                return obj
+            return getter
+        else:
+            return storage.get
 
     @cached
     def _bro(self):
@@ -269,7 +567,7 @@ class BWContext(BWThrowable):
         if not bases:
             return ()
         elif len(bases) == 1:
-            return (bases[0]._ref,) + bases[0]._bro
+            return (bases[0]._ref_getfn,) + bases[0]._bro
         else:
             return tuple(reversed(self._rbro))
 
@@ -279,39 +577,41 @@ class BWContext(BWThrowable):
         if not bases:
             return ()
         elif len(bases) == 1:
-            return bases[0]._rbro + (bases[0]._ref,)
+            return bases[0]._rbro + (bases[0]._ref_getfn,)
         else:
             ctx = list(bases[-1]._rbro)
-            ctx.append(bases[-1]._ref)
+            ctx.append(bases[-1]._ref_getfn)
             found = set(id(c) for c in ctx)
             for base in reversed(bases[:-1]):
-                for ref in base._rbro:
-                    if id(ref) not in found:
-                        ctx.append(ref)
-                        found.add(id(ref))
-                ref = base._ref
-                if id(ref) not in found:
-                    ctx.append(ref)
-                    found.add(id(ref))
+                for getter in base._rbro:
+                    if id(getter) not in found:
+                        ctx.append(getter)
+                        found.add(id(getter))
+                getter = base._ref_getfn
+                if id(getter) not in found:
+                    ctx.append(getter)
+                    found.add(id(getter))
             return tuple(ctx)
 
     def get(self, key, default=None, NOT_FOUND=NOT_FOUND, DELETED=DELETED):
-        obj = self._ref.get(key, NOT_FOUND)
-        if obj is NOT_FOUND:
-            for ref in self._bro:   # pragma: no partial
-                obj = ref.get(key, NOT_FOUND)
-                if obj is not NOT_FOUND:
-                    break
-            else:
-                obj = default
+        # This will always have at least one getter.
+        for getter in self._getters:    # pragma: no partial
+            obj = getter(key, NOT_FOUND)
+            if obj is not NOT_FOUND:
+                break
+        else:
+            obj = default
         if obj is DELETED:
             obj = default
-        while getattr(obj, '__ctxproperty__', False):
-            obj = obj(self)
+        if getattr(obj, '__ctxproperty__', False):
+            obj = obj(self, None, default)
         return obj
 
     def __getattr__(self, name, NOT_FOUND=NOT_FOUND):
-        return BWBoundContextRef(self, name.replace('__', '.'))
+        if name.startswith('_'):
+            raise AttributeError(name)
+        else:
+            return BWBoundContextRef(self, name.replace('__', '.'))
 
     def __setattr__(self, name, value):
         self[name.replace('__', '.')] = value
@@ -333,7 +633,11 @@ class BWContext(BWThrowable):
                 uninstall[ikey] = self.get(ikey, DELETED)
             self._storage.update(install_ctx._ref)
             self._storage[key, 'uninstall'] = uninstall
-        self._storage[key] = value
+        if isinstance(key, basestring) and key.endswith('.'):
+            self.__dict__['_varkeys'] = self._varkeys + ((key, value),)
+            self._storage[key[:-1]] = value
+        else:
+            self._storage[key] = value
 
     def __delitem__(self, key):
         uninstall = self.get((key, 'uninstall'), None)
@@ -347,9 +651,9 @@ class BWContext(BWThrowable):
         when referenced).
 
         >>> ctx = BWContext('test')
-        >>> ctx.fn = ctx.property(lambda c: 'hello')
+        >>> ctx.fn = ctx.property(lambda c, s, d: 'hello')
         >>> ctx.fn
-        <test.fn => 'hello'>
+        <test/fn => 'hello'>
         '''
 
         fn.__ctxproperty__ = True
@@ -357,6 +661,9 @@ class BWContext(BWThrowable):
 
     def __repr__(self):
         return '<' + self._name + '>'
+
+    def __ctxproperty__(self, basectx, subpath, default=None):
+        return self.get(subpath, default)
 
 class BWContextRef(BWObject):
     def __pos__(self, NOT_FOUND=NOT_FOUND):
@@ -375,6 +682,20 @@ class BWContextRef(BWObject):
     def __pow__(self, other):
         return self._self() ** other
 
+    def __rdiv__(self, ctx):
+        if ctx is None:
+            return BWUnboundContextRef(self._ctxtype, self._path)
+        elif isinstance(ctx, dict):
+            return BWBoundContextRef(BWContext(type(ctx).__name__, **ctx),
+                                     self._path)
+        elif isinstance(ctx, self._ctxtype):
+            return BWBoundContextRef(ctx, self._path)
+        elif isinstance(ctx, type) and issubclass(ctx, self._ctxtype):
+            return BWUnboundContextRef(ctx, self._path)
+        else:
+            raise TypeError(('Ref resolution requires dict, a subclass or ' +
+                    'instance of %s, or None') % (self._ctxtype.__name__,))
+
     def _self(self, default=None):
         return default
 
@@ -384,7 +705,7 @@ class BWContextRef(BWObject):
 
     def expose(self, obj, *members):
         for member in members:
-            self[member] = self.property(lambda c: getattr(obj, member))
+            self[member] = self.property(lambda c, s, p: getattr(obj, member))
 
 class BWBoundContextRef(BWContextRef):
     def __init__(self, ctx, path):
@@ -401,7 +722,10 @@ class BWBoundContextRef(BWContextRef):
         del self[name.replace('__', '_')]
 
     def __getitem__(self, subpath, NOT_FOUND=NOT_FOUND):
-        return type(self)(self._ctx, self._path + '.' + subpath)
+        if subpath:
+            return type(self)(self._ctx, self._path + '.' + subpath)
+        else:
+            return self
 
     def __setitem__(self, subpath, value):
         self._ctx[self._path + '.' + subpath] = value
@@ -414,26 +738,29 @@ class BWBoundContextRef(BWContextRef):
 
     def __repr__(self):
         value = ~self
-        return '<%s.%s => %s>' % (self._ctx._name, self._path,
+        return '<%s/%s => %s>' % (self._ctx._name, self._path,
                                   ':missing:' if value is type(None)
                                                 else repr(value))
 
+    @cached
+    def _ctxtype(self):
+        return type(self._ctx)
+
 class BWUnboundContextRef(BWContextRef):
-    def __init__(self, path):
+    def __init__(self, ctxtype, path):
+        self.__dict__['_ctxtype'] = ctxtype
         self.__dict__['_path'] = path
 
     def __getattr__(self, name):
-        return type(self)(self._path + '.' + name.replace('__', '_'))
+        return type(self)(self._ctxtype,
+                          self._path + '.' + name.replace('__', '_'))
 
     def __getitem__(self, subpath):
-        return type(self)(self._path + '.' + subpath)
-
-    def __call__(self, ctx):
-        if isinstance(ctx, BWContext):
-            return BWBoundContextRef(ctx, self._path)
+        if subpath:
+            return type(self)(self._ctxtype, self._path + '.' + subpath)
         else:
-            raise TypeError('Unbound ref requires a context')
+            return self
 
     def __repr__(self):
-        return '<%s>' % (self._path)
+        return '<*%s/%s>' % (self._ctxtype.__name__, self._path)
 

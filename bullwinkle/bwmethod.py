@@ -390,7 +390,6 @@ class AroundSuperMethodBuilder(SuperMethodBuilder):
     @filter_super(want_args=False)
     def get_fn_positional_args(self, res):
         return res + ('super_fn',)
-
 around_super = AroundSuperMethodBuilder
 
 def override_result(v, type_none=type(None)):

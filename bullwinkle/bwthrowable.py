@@ -101,6 +101,7 @@ None
 '''
 
 from __version__ import *
+from bwobject import BWObject
 import sys
 
 def throw(key, value, frame=0):
@@ -120,7 +121,7 @@ class BWThrowableNotFoundError(Exception):
     def __init__(self, cls):
         self.cls = cls
 
-class BWThrowable(object):
+class BWThrowable(BWObject):
     def throw(self, frame=0):
         sys._getframe(frame + 1).f_locals[type(self)] = self
     __enter__ = throw

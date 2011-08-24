@@ -32,6 +32,10 @@ CHANGELOG = ChangeLog(
         'Fixed numerous bugs via code coverage'
         ),
     Version('0.3.4',
+        'Added better reference mechanics to context',
+        'Added rebinding of contexts to context referecnes',
+        'Added ability to set partial paths on contexts',
+        'Removed classcachedmethod as no good use case emerged for it',
         ),
 )
 
