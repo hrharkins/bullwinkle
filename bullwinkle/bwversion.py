@@ -102,7 +102,7 @@ class ChangeLog(tuple):
     '''
 
     def __new__(cls, *items):
-        return super(ChangeLog, cls).__new__(cls, reversed(sorted(items)))
+        return super(ChangeLog, cls).__new__(cls, sorted(items))
 
     def __str__(self):
         return '\n\n'.join(
