@@ -5,6 +5,11 @@ __changelog__ -- contains the project changelog in object form.
 from bwversion import Version, ChangeLog
 
 CHANGELOG = ChangeLog(
+    Version('0.3.6',
+        'Fixed missing BWContext problem',
+        'Fixed bug where varkeys from installctx was not pushed into ctx',
+        'Fixed semantics on __ctxproperty__',
+        ),
     Version('0.3.5',
         'Fixed missing into() problem',
         ),

@@ -328,6 +328,73 @@ declarations:
 >>> print -ctx.user
 None
 
+======================
+=== Dynamic values ===
+======================
+
+Objects placed in a context that define a __ctxproperty__ attribut will
+have that attribute called (as a function or method) upon access by a
+context.  The property function will receive the context, the subpath, and
+a default value and is responsible for determining the correct value given
+those arguments or returning default if inappropriate or not found.
+
+The BWContext .property() method will convert a normal Python function into
+an object that produces the described effect.
+
+>>> def printer(ctx, subpath, default):
+...     return 'Hello %s' % subpath
+...
+>>> ctx = BWContext('test-property')
+>>> ctx['hello.'] = ctx.property(printer)
+>>> ctx.hello.world
+<test-property/hello.world => 'Hello world'>
+
+This could be defined in objects as the following:
+
+>>> class MyPrinter(BWContextInstallable, BWContextProperty):
+...     prefix = member(str, default='Hello')
+...
+...     def ctx_access(self, ctx, subpath, default):
+...         return '%s %s' % (self.prefix, subpath)
+...
+...     def ctx_install(self, ctx):
+...         ctx[''] = self      # All accesses below this go to self too.
+...
+>>> ctx = BWContext('test-property-object')
+>>> ctx.hello = MyPrinter()
+>>> ctx.hello.world
+<test-property-object/hello.world => 'Hello world'>
+
+==========================
+=== Installing Objects ===
+==========================
+
+Objects that define an __installctx__ method will have that method called
+when the object is assigned to a context.   This method will receive a
+context ref indiciating where the object should be installed.  The
+installation occurs on a temporary sub-context which is then merged if the
+installation is successful.  Additionally, any variables set in the process
+are tracked and removed if del is later invoked on the path.
+
+As noted in the example of the previous section, the BWContextInstallable
+base class will call 'ctx_install' instead, making the code slightly more
+readable.
+
+Installers can also use the context's "property" method to define property
+functions:
+
+>>> class HelloMachine(BWContextInstallable):
+...     def ctx_install(self, ctx):
+...         ctx[''] = ctx.property(lambda c, s, d: self.helloizer(s))
+...
+...     def helloizer(self, subpath):
+...         return 'Hello %s' % subpath
+...
+>>> ctx = BWContext('test-install')
+>>> ctx.hello = HelloMachine()
+>>> ctx.hello.world
+<test-install/hello.world => 'Hello world'>
+
 =======================
 === Dynamic getters ===
 =======================
@@ -554,7 +621,10 @@ class BWContext(BWThrowable):
                             break
                     else:
                         obj = default
-                if getattr(obj, '__ctxproperty__', False):
+                propfn = getattr(obj, '__ctxproperty__', None)
+                if propfn is True:
+                    obj = obj(self, subkey, default)
+                elif propfn is not None:
                     obj = obj.__ctxproperty__(self, subkey, default)
                 return obj
             return getter
@@ -603,8 +673,11 @@ class BWContext(BWThrowable):
             obj = default
         if obj is DELETED:
             obj = default
-        if getattr(obj, '__ctxproperty__', False):
+        propfn = getattr(obj, '__ctxproperty__', None)
+        if propfn is True:
             obj = obj(self, None, default)
+        elif propfn is not None:
+            obj = obj.__ctxproperty__(self, None, default)
         return obj
 
     def __getattr__(self, name, NOT_FOUND=NOT_FOUND):
@@ -620,19 +693,31 @@ class BWContext(BWThrowable):
         del self[name.replace('__', '.')]
 
     def __getitem__(self, key, NOT_FOUND=NOT_FOUND):
-        return BWBoundContextRef(self, key.replace('__', '.'))
+        if key is None:
+            return self
+        else:
+            return BWBoundContextRef(self, key.replace('__', '.'))
 
     def __setitem__(self, key, value, NOT_FOUND=NOT_FOUND):
         fn = getattr(value, '__installctx__', None)
-        if fn is not None:
+        if (fn is not None and
+            self.get(('__installed__', key, id(value))) is None):
+
             del self[key]
-            install_ctx = type(self)(None, self)
+            install_ctx = self()
+            install_ctx._storage['__installed__', key, id(value)] = True
             fn(install_ctx[key])
             uninstall = {}
             for ikey in install_ctx._ref:
                 uninstall[ikey] = self.get(ikey, DELETED)
             self._storage.update(install_ctx._ref)
-            self._storage[key, 'uninstall'] = uninstall
+            if install_ctx._varkeys:
+                self.__dict__['_varkeys'] = \
+                    (self._varkeys + install_ctx._varkeys)
+            self.__dict__.pop('_storage_getfn', None)
+            self.__dict__.pop('_getters', None)
+            self._storage[key, '__uninstall__'] = uninstall
+
         if isinstance(key, basestring) and key.endswith('.'):
             self.__dict__['_varkeys'] = self._varkeys + ((key, value),)
             self._storage[key[:-1]] = value
@@ -640,7 +725,7 @@ class BWContext(BWThrowable):
             self._storage[key] = value
 
     def __delitem__(self, key):
-        uninstall = self.get((key, 'uninstall'), None)
+        uninstall = self.get((key, '__uninstall__'), None)
         if uninstall:
             self._storage.update(uninstall)
         self._storage[key] = DELETED
@@ -664,6 +749,20 @@ class BWContext(BWThrowable):
 
     def __ctxproperty__(self, basectx, subpath, default=None):
         return self.get(subpath, default)
+
+class BWContextInstallable(BWObject):
+    def __installctx__(self, ctx):
+        self.ctx_install(ctx)
+
+    def ctx_install(self, ctx):
+        pass
+
+class BWContextProperty(BWObject):
+    def __ctxproperty__(self, ctx, subpath, default):
+        return self.ctx_access(ctx, subpath, default)
+
+    def ctx_access(self, ctx, subpath, default):
+        return default
 
 class BWContextRef(BWObject):
     def __pos__(self, NOT_FOUND=NOT_FOUND):
@@ -724,11 +823,15 @@ class BWBoundContextRef(BWContextRef):
     def __getitem__(self, subpath, NOT_FOUND=NOT_FOUND):
         if subpath:
             return type(self)(self._ctx, self._path + '.' + subpath)
+        elif subpath == '.':
+            return type(self)(self._ctx, self._path + '.')
         else:
             return self
 
     def __setitem__(self, subpath, value):
-        self._ctx[self._path + '.' + subpath] = value
+        # Prevent recursion on ctx[''] = installable
+        if subpath or not self._path.endswith('.'):
+            self._ctx[self._path + '.' + subpath] = value
 
     def __delitem__(self, subpath):
         del self._ctx[self._path + '.' + subpath]
@@ -746,6 +849,10 @@ class BWBoundContextRef(BWContextRef):
     def _ctxtype(self):
         return type(self._ctx)
 
+    @cached
+    def context(self):
+        return self._ctx
+
 class BWUnboundContextRef(BWContextRef):
     def __init__(self, ctxtype, path):
         self.__dict__['_ctxtype'] = ctxtype
@@ -758,9 +865,15 @@ class BWUnboundContextRef(BWContextRef):
     def __getitem__(self, subpath):
         if subpath:
             return type(self)(self._ctxtype, self._path + '.' + subpath)
+        elif subpath == '.':
+            return type(self)(self._ctxtype, self._path + '.')
         else:
             return self
 
     def __repr__(self):
         return '<*%s/%s>' % (self._ctxtype.__name__, self._path)
+
+    @cached
+    def context(self):
+        return self._ctxtype(self._ctxtype.CURRENT)
 
