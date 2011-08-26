@@ -7,12 +7,13 @@ This can be invoked via python bullwinkle.__test__
 import doctest
 
 if __name__ == '__main__':
-    import bwversion, bwobject, bwmethod, bwcontext
+    import bwversion, bwobject, bwmethod, bwcontext, bwcode
     import bwcached, bwmember, bwthrowable#, bwconvertable
     doctest.testmod(bwversion)
     doctest.testmod(bwobject)
     doctest.testmod(bwmethod)
     doctest.testmod(bwcontext)
+    doctest.testmod(bwcode)
     doctest.testmod(bwcached)
     doctest.testmod(bwmember)
     doctest.testmod(bwthrowable)
