@@ -4,9 +4,17 @@ setup -- Setup script for bullwinkle
 
 from bullwinkle.__version__ import *
 from setuptools import setup
+import sys
 
-if not VERSION.label:
-    raise RuntimeError("Change log not written for %s" % (VERSION,))
+if CHANGELOG.blocked:
+    print >>sys.stderr, ''
+    print >>sys.stderr, 'Blocking versions present in changelog:'
+    print >>sys.stderr, ''
+    for version in CHANGELOG:
+        if version.blocker:
+            print >>sys.stderr, version.details()
+            print >>sys.stderr, ''
+    sys.exit(1)
 
 setup(
     name = 'bullwinkle',

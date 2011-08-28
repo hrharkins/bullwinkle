@@ -18,6 +18,7 @@ parameters to all called functions, so:
 
 >>> req = HTTPRequest('GET', '/index.html')
 >>> req.throw()
+HTTPRequest()
 
 Now any function that needs access to the request but cannot acquire it by
 parameter can pick it up using .catch():
@@ -43,6 +44,7 @@ optional if the key name is a simple string:
 ...     print catch(name)
 ...
 >>> throw('x', 5)
+5
 >>> catcher('x')
 5
 >>> x = 7
@@ -72,6 +74,7 @@ accessed via TC, by attribute or item, is catch()'ed:
 ...
 >>> rug = MyThrowable()
 >>> rug.throw()
+MyThrowable()
 >>> catcher(MyThrowable) is rug
 True
 
@@ -106,6 +109,7 @@ import sys
 
 def throw(key, value, frame=0):
     sys._getframe(frame + 1).f_locals[key] = value
+    return value
 
 def catch(key, default=None, NOT_FOUND=KeyError):
     f = sys._getframe(1)
@@ -124,6 +128,7 @@ class BWThrowableNotFoundError(Exception):
 class BWThrowable(BWObject):
     def throw(self, frame=0):
         sys._getframe(frame + 1).f_locals[type(self)] = self
+        return self
     __enter__ = throw
 
     @classmethod

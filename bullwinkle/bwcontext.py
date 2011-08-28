@@ -129,6 +129,18 @@ True
 >>> bound[''] is bound
 True
 
+To get at the underlying context, use the .context attribute.  This may
+create lookup the current context if necessary.  This property also exists
+on contexts as well as ref so it can be used ubiquitously if needed.
+
+>>> ctx = BWContext('root').throw()
+>>> ctx.context is ctx                  # Context self-ref
+True
+>>> ctx['hello'].context is ctx         # Bound context ref
+True
+>>> BWContext['hello'].context          # Unbound context ref
+<root{1}>
+
 ========================================
 === Dereferencing Context References ===
 ========================================
@@ -268,7 +280,7 @@ this is equivalent to the above "bottom" case:
 Contexts can are BWThrowables (see bwthrowable) and can be retrieved via
 the class property BWContext.CURRENT:
 
->>> rootctx.throw()
+>>> ctx = rootctx.throw()
 >>> BWContext.CURRENT is rootctx
 True
 
@@ -351,19 +363,31 @@ an object that produces the described effect.
 
 This could be defined in objects as the following:
 
+>>> from bullwinkle import after_super, before_super
 >>> class MyPrinter(BWContextInstallable, BWContextProperty):
 ...     prefix = member(str, default='Hello')
+...     exclude = member(str, None, default=None)
 ...
+...     @before_super
 ...     def ctx_access(self, ctx, subpath, default):
-...         return '%s %s' % (self.prefix, subpath)
+...         if subpath != self.exclude:
+...             return '%s %s!' % (self.prefix, subpath)
 ...
+...     @after_super
 ...     def ctx_install(self, ctx):
 ...         ctx[''] = self      # All accesses below this go to self too.
 ...
 >>> ctx = BWContext('test-property-object')
 >>> ctx.hello = MyPrinter()
 >>> ctx.hello.world
-<test-property-object/hello.world => 'Hello world'>
+<test-property-object/hello.world => 'Hello world!'>
+
+Contrast this with:
+
+>>> ctx = BWContext('test-property-object')
+>>> ctx.hello = MyPrinter(exclude='world')
+>>> ctx.hello.world
+<test-property-object/hello.world => :missing:>
 
 ==========================
 === Installing Objects ===
@@ -429,6 +453,8 @@ implementation will either:
 >>> sub = BWContext(ctx)
 >>> sub.whole_world.something
 <test{1}/whole_world.something => 'hello world'>
+>>> sub.something_else
+<test{1}/something_else => :missing:>
 
 Note that the first example is :missing: because the test is for things
 that start with "whole_world.", not just "whole_world".
@@ -612,7 +638,7 @@ class BWContext(BWThrowable):
                             self=self, varkeys=varkeys, storage=storage):
                 obj = storage.get(key, NOT_FOUND)
                 subkey = None
-                if obj is NOT_FOUND:
+                if obj is NOT_FOUND and isinstance(key, basestring):
                     # We've already tested for at least one varkey.
                     for prefix, value in varkeys: # pragma: no partial
                         if key.startswith(prefix):
@@ -621,15 +647,18 @@ class BWContext(BWThrowable):
                             break
                     else:
                         obj = default
-                propfn = getattr(obj, '__ctxproperty__', None)
-                if propfn is True:
-                    obj = obj(self, subkey, default)
-                elif propfn is not None:
-                    obj = obj.__ctxproperty__(self, subkey, default)
-                return obj
+                return self._getprop(obj, default, subkey)
             return getter
         else:
             return storage.get
+
+    def _getprop(self, obj, default=None, subkey=None):
+        propfn = getattr(obj, '__ctxproperty__', None)
+        if propfn is True:
+            obj = obj(self, subkey, default)
+        elif propfn is not None:
+            obj = obj.__ctxproperty__(self, subkey, default)
+        return obj
 
     @cached
     def _bro(self):
@@ -673,12 +702,7 @@ class BWContext(BWThrowable):
             obj = default
         if obj is DELETED:
             obj = default
-        propfn = getattr(obj, '__ctxproperty__', None)
-        if propfn is True:
-            obj = obj(self, None, default)
-        elif propfn is not None:
-            obj = obj.__ctxproperty__(self, None, default)
-        return obj
+        return self._getprop(obj, default)
 
     def __getattr__(self, name, NOT_FOUND=NOT_FOUND):
         if name.startswith('_'):
@@ -693,12 +717,13 @@ class BWContext(BWThrowable):
         del self[name.replace('__', '.')]
 
     def __getitem__(self, key, NOT_FOUND=NOT_FOUND):
-        if key is None:
-            return self
-        else:
-            return BWBoundContextRef(self, key.replace('__', '.'))
+        return BWBoundContextRef(self, key.replace('__', '.'))
 
     def __setitem__(self, key, value, NOT_FOUND=NOT_FOUND):
+        uninstall = self.get((key, '__uninstall__'), None)
+        if uninstall is not None:
+            self._storage.update(uninstall)
+
         fn = getattr(value, '__installctx__', None)
         if (fn is not None and
             self.get(('__installed__', key, id(value))) is None):
@@ -714,13 +739,15 @@ class BWContext(BWThrowable):
             if install_ctx._varkeys:
                 self.__dict__['_varkeys'] = \
                     (self._varkeys + install_ctx._varkeys)
+            self._storage[key, '__uninstall__'] = uninstall
             self.__dict__.pop('_storage_getfn', None)
             self.__dict__.pop('_getters', None)
-            self._storage[key, '__uninstall__'] = uninstall
 
         if isinstance(key, basestring) and key.endswith('.'):
             self.__dict__['_varkeys'] = self._varkeys + ((key, value),)
             self._storage[key[:-1]] = value
+            self.__dict__.pop('_storage_getfn', None)
+            self.__dict__.pop('_getters', None)
         else:
             self._storage[key] = value
 
@@ -729,6 +756,10 @@ class BWContext(BWThrowable):
         if uninstall:
             self._storage.update(uninstall)
         self._storage[key] = DELETED
+
+    @property
+    def context(self):
+        return self
 
     def property(self, fn):
         '''
@@ -823,8 +854,6 @@ class BWBoundContextRef(BWContextRef):
     def __getitem__(self, subpath, NOT_FOUND=NOT_FOUND):
         if subpath:
             return type(self)(self._ctx, self._path + '.' + subpath)
-        elif subpath == '.':
-            return type(self)(self._ctx, self._path + '.')
         else:
             return self
 
@@ -865,8 +894,6 @@ class BWUnboundContextRef(BWContextRef):
     def __getitem__(self, subpath):
         if subpath:
             return type(self)(self._ctxtype, self._path + '.' + subpath)
-        elif subpath == '.':
-            return type(self)(self._ctxtype, self._path + '.')
         else:
             return self
 

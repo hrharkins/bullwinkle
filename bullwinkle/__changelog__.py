@@ -2,13 +2,20 @@
 __changelog__ -- contains the project changelog in object form.
 '''
 
-from bwversion import Version, ChangeLog
+from bwversion import Version, WIPVersion, PlannedVersion, ChangeLog
 
 CHANGELOG = ChangeLog(
+    WIPVersion('0.3.7',
+        'Added more flavours of Version (WIPVersion, PlannedVersion)',
+        'Fixed bug preventing Version subclasses from working',
+        'Added .all property to ChangeLog to show planned versions',
+        ),
     Version('0.3.6',
         'Fixed missing BWContext problem',
         'Fixed bug where varkeys from installctx was not pushed into ctx',
         'Fixed semantics on __ctxproperty__',
+        'Added better context installer support',
+        'throw() now returns the thrown object',
         ),
     Version('0.3.5',
         'Fixed missing into() problem',
