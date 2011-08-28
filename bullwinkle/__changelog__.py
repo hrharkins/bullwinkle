@@ -9,6 +9,8 @@ CHANGELOG = ChangeLog(
         'Fixed missing BWContext problem',
         'Fixed bug where varkeys from installctx was not pushed into ctx',
         'Fixed semantics on __ctxproperty__',
+        'Added better context installer support',
+        'throw() now returns the thrown object',
         ),
     Version('0.3.5',
         'Fixed missing into() problem',
