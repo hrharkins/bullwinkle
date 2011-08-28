@@ -23,5 +23,5 @@ from bwmember import member, into
 from bwcontext import BWContext
 from bwthrowable import throw, catch, BWThrowable, TC
 
-__doc__ += '\nCHANGELOG:\n\n' + str(CHANGELOG)
+__doc__ += '\nCHANGELOG:\n\n' + CHANGELOG.all
 

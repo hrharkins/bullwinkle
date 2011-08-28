@@ -51,14 +51,17 @@ class Version(tuple):
     >>> 'Version %s' % (v,)
     'Version 0.5'
     '''
+    blocker = False
+    visible = True
+    flag = ''
 
     def __new__(cls, src, *changes):
         if src is None or isinstance(src, Version):
             return src
         elif isinstance(src, basestring):
-            return Version(src.split('.'), *changes)
+            return cls(src.split('.'), *changes)
         elif isinstance(src, (int, float)):
-            return Version(str(src), *changes)
+            return cls(str(src), *changes)
         else:
             obj = super(Version, cls).__new__(cls, src)
             obj.changes = changes
@@ -86,6 +89,62 @@ class Version(tuple):
         return '.'.join(map(str, self))
     __repr__ = __str__
 
+    def details(self, indent=''):
+        return '%s%s%s\n%s    * %s' % (
+                indent, 
+                self,
+                ' (%s)' % self.flag if self.flag else '',
+                indent,
+                '<No log provided>' if self.label is None
+                    else self.label if len(self.changes) == 1
+                    else ('\n%s    * ' % indent).join(map(str, self.changes)))
+
+
+class WIPVersion(Version):
+    '''
+    Flag subclass to indicate versions that are Work-In-Progress and thus
+    makiung the changelog unreleasable.
+
+    >>> log = ChangeLog(
+    ...     WIPVersion(0,2, 'In progress'),
+    ...     Version(0,1, 'Something'),
+    ...     )
+    >>> log.blocked
+    True
+    >>> log = ChangeLog(
+    ...     Version(0,2, 'Done'),
+    ...     Version(0,1, 'Something'),
+    ...     )
+    >>> log.blocked
+    False
+    '''
+    blocker = True
+    flag = 'WIP'
+
+class PlannedVersion(Version):
+    '''
+    Represents a version not being worked on but having planned features.
+    These versions will not appear in the changelog but will not hold up a
+    release.
+
+    >>> log = ChangeLog(
+    ...     PlannedVersion(0.3, 'TBD'),
+    ...     WIPVersion(0.2, 'In progress'),
+    ...     Version(0.1, 'Something'),
+    ...     )
+    >>> log.blocked
+    True
+    >>> log = ChangeLog(
+    ...     PlannedVersion(0.3, 'TBD'),
+    ...     Version(0.2, 'Done'),
+    ...     Version(0.1, 'Something'),
+    ...     )
+    >>> log.blocked
+    False
+    '''
+    visible = False
+    flag = 'Planned'
+
 class ChangeLog(tuple):
     '''
     >>> ChangeLog(
@@ -105,14 +164,22 @@ class ChangeLog(tuple):
         return super(ChangeLog, cls).__new__(cls, sorted(items))
 
     def __str__(self):
-        return '\n\n'.join(
-            '%s\n    * %s' % (
-                version,
-                '<No log provided>' if version.label is None
-                    else version.label if len(version.changes) == 1
-                    else '\n    * '.join(map(str, version.changes))
-                ) for version in reversed(sorted(self)))
+        return '\n\n'.join(version.details('')
+                           for version in reversed(sorted(self))
+                           if version.visible)
+
+    @property
+    def all(self):
+        return '\n\n'.join(version.details('')
+                           for version in reversed(sorted(self)))
 
     __repr__ = __str__
 
+    @property
+    def blocked(self):
+        for version in self:
+            if version.blocker:
+                return True
+        else:
+            return False
 
