@@ -158,6 +158,10 @@ class ChangeLog(tuple):
     <BLANKLINE>
     0.1
         * Version 0.1
+
+    Changelogs are not blocked by default:
+    >>> ChangeLog().blocked
+    False
     '''
 
     def __new__(cls, *items):
@@ -180,6 +184,5 @@ class ChangeLog(tuple):
         for version in self:
             if version.blocker:
                 return True
-        else:
-            return False
+        return False
 
