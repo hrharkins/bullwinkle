@@ -28,7 +28,7 @@ hello world
 hello world
 
 ==========================
-=== Creating functions ===
+=== Creating Functions ===
 ==========================
 
 >>> block = BWCodeBlock.function('hello')
@@ -46,6 +46,27 @@ To access the underlying function, use the object attribute:
 >>> fn = block.object
 >>> fn()
 Hello world
+
+Function arguments can be added after the fact:
+
+>>> fnblk = BWCodeBlock.function('hello')
+>>> fnblk.add_posarg('x')
+>>> fnblk.add_posarg('y')
+>>> fnblk.add_kwarg('y', 7)
+>>> fnblk.add_kwarg('radius', 5)
+>>> fnblk.set_kwall('__kw__')
+>>> print fnblk
+# {$ radius $} = 5
+# {$ y $} = 7
+def hello(x, y={$ y $}, radius={$ radius $}, **__kw__):
+    pass
+
+Arguments can be tested as well:
+
+>>> fnblk.has_posarg('x')
+True
+>>> fnblk.has_kwarg('radius')
+True
 
 =================================
 === Creating anonymous blocks ===
@@ -91,9 +112,14 @@ def hello_world():
 def hello():
     print "Hello world"
 
-=======================
-=== Block Variables ===
-=======================
+============================
+=== Block Pseudo-globals ===
+============================
+
+It is commonly necessary to pass objects into the compiled block.  To avoid
+name conflicts at the Python level, pseudo-globals can be added to any
+block.  These are then dereferenced using {$ ... $} and are setup such that
+they will not create name conflicts with other pseudo-globals.
 
 >>> block = BWCodeBlock.function('stuff')
 >>> block.add_return('{$ xyz $}')
@@ -122,6 +148,25 @@ NameError: pseudo-var {$ xyz $} is not defined
 >>> block.addvars(dict(xyz='Hello there'))
 >>> block.object()
 'Hello there'
+
+Pseudo-globals are listed as comments in the source to make debugging
+easier:
+
+>>> with BWCodeBlock.function('hello', who='world') as hello_blk:
+...     hello_blk.add_print('"Hello %s" % {$ world $}')
+...
+>>> print hello_blk
+# {$ who $} = 'world'
+def hello(who={$ who $}):
+    print "Hello %s" % {$ world $}
+
+Very long values are truncated during repr:
+
+>>> hello_blk['who'] = 'Something wicked this way comes -- on and on again'
+>>> print hello_blk
+# {$ who $} = 'Something wicked this way comes -- on ...
+def hello(who={$ who $}):
+    print "Hello %s" % {$ world $}
 
 ================
 === Printing ===
@@ -175,6 +220,15 @@ def setter(t):
     a, b, c = {$ t $}
     x = ", ".join({$ t $})
     print {$ a $}, {$ b $}, {$ c $}
+
+================
+=== Comments ===
+================
+
+>>> blk = BWCodeBlock.anonymous()
+>>> blk.add_comment('Hello')
+>>> print blk
+# Hello
 
 =================
 === If blocks ===
@@ -232,6 +286,84 @@ def ranger(end, start={$ start $}):
     while {$ n $} <= {$ end $}:
         yield {$ n $}
         n += 1
+
+==================
+=== Exceptions ===
+==================
+
+>>> raise_blk = BWCodeBlock.function('raiser')
+>>> raise_blk.add_raise('TypeError', repr('huh'))
+>>> raise_blk.object()
+Traceback (most recent call last):
+    ...
+TypeError: huh
+
+>>> with BWCodeBlock.function('divider', 'numerator', 'denominator') as blk:
+...     with blk.add_try() as try_blk:
+...         try_blk.add_return('numerator / denominator')
+...     with blk.add_except('ZeroDivisionError') as catch_blk:
+...         catch_blk.add_print(repr('DIV BY ZERO'))
+...     with blk.add_finally() as finally_blk:
+...         finally_blk.add_print(repr('Done'))
+...
+>>> fn = blk.object
+>>> fn(4, 2)
+Done
+2
+>>> fn(1, 0)
+DIV BY ZERO
+Done
+
+Except clauses can come in any of the Python forms:
+
+>>> blk = BWCodeBlock.anonymous()
+>>> try_blk = blk.add_try()
+>>> try_blk.add_except()
+except:
+    pass
+>>> try_blk.add_except('TypeError')
+except (TypeError):
+    pass
+>>> try_blk.add_except(('TypeError', 'ValueError'))
+except (TypeError, ValueError):
+    pass
+>>> try_blk.add_except('TypeError', 't')
+except (TypeError), t:
+    pass
+
+==============================
+=== Elif, Except, and Else ===
+==============================
+
+Both the containing blocks as well as instructions themselves can have
+add_else, add_elif, and add_except as appropriate.  When used in the outer
+block they must immediately follow the correct branching instruction:
+
+>>> blk = BWCodeBlock.anonymous()
+>>> blk.add_else()
+Traceback (most recent call last):
+    ...
+TypeError: 'add_else' not allowed on 'BWCodeBlock'
+>>> blk.add_elif('x < 0')
+Traceback (most recent call last):
+    ...
+TypeError: 'add_elif' not allowed on 'BWCodeBlock'
+>>> blk.add_except('TypeError')
+Traceback (most recent call last):
+    ...
+TypeError: 'add_except' not allowed on 'BWCodeBlock'
+>>> blk.add_finally()
+Traceback (most recent call last):
+    ...
+TypeError: 'add_finally' not allowed on 'BWCodeBlock'
+
+The calls will also failed if used on an inappropriate type of branch:
+
+>>> if_blk = blk.add_if('x > 1')
+>>> blk.add_finally()
+Traceback (most recent call last):
+    ...
+TypeError: 'add_finally' not allowed on 'BWIfBlock'
 
 ==========================
 === Internal Functions ===
@@ -301,6 +433,19 @@ Anonymous blocks can be tagged during construction:
 >>> BWCodeBlock.anonymous('hello')
 # Block tagged 'hello'
 
+To lookup single blocks, use find_tag().  This will either return None, the
+single block, or raise a ValueError if more than one block matches:
+
+>>> hello_blk.find_tag('x_over_0')
+Traceback (most recent call last):
+    ...
+ValueError: multiple results for tag 'x_over_0'
+>>> hello_blk.find_tag('x_under_0')
+# Block tagged 'x_under_0'
+else:
+    print 'x < 0'
+>>> hello_blk.find_tag('something_else')
+
 ===============================
 === Testing for Termination ===
 ===============================
@@ -321,8 +466,15 @@ True
 >>> open_blk.is_terminal
 False
 
-Only if all branches are terminal OR a terminal statement follows branches
-will the block be considered terminal:
+>>> with BWCodeBlock.anonymous() as tries_blk:
+...     with tries_blk.add_try() as try_blk:
+...         try_blk.add_return()
+...
+>>> tries_blk.is_terminal
+True
+
+For branches, all branches must be terminal for the branching statement to
+be considered terminal (for, while, if, try):
 
 >>> with BWCodeBlock.anonymous() as returns_blk:
 ...     returns_blk.add_print(repr('hello'))
@@ -408,6 +560,9 @@ class BWCodeBlock(object):
 
     @cached
     def is_terminal(self):
+        return self.check_terminal()
+
+    def check_terminal(self):
         if self.terminal:
             return True
         elif 'block' in self.__dict__:
@@ -457,14 +612,17 @@ class BWCodeBlock(object):
         levelvars = dict(basevars)
         levelvars.update(self.vardict)
 
-        for tag in self.tags:
-            yield indent + '# Block tagged %r' % tag
+        if self.tags:
+            for tag in sorted(self.tags):
+                yield indent + '# Block tagged %r' % tag
 
-        for name, value in self.vardict.iteritems():
-            rval = repr(value)
-            if len(rval) > 40:
-                rval = rval[:38] + ' ...'
-            yield indent + '# {$ %s $} = %s' % (name, rval)
+        if self.vardict:
+            for name in sorted(self.vardict):
+                value = self.vardict[name]
+                rval = repr(value)
+                if len(rval) > 40:
+                    rval = rval[:38] + ' ...'
+                yield indent + '# {$ %s $} = %s' % (name, rval)
 
         def varinsert(match):
             varname = match.group(1)
@@ -546,8 +704,7 @@ class BWCodeBlock(object):
         self.__dict__.pop('object', None)
         self.block.append(block)
         if block.branches:
-            if self.last_branch is None:
-                self.last_branch = block
+            self.last_branch = block
         else:
             self.last_branch = None
         return block
@@ -590,15 +747,17 @@ class BWCodeBlock(object):
 
     def add_elif(_self, _expr, **_kw):
         if _self.last_branch is None:
-            raise TypeError('Last statement was not branching')
+            raise TypeError('%r not allowed on %r' %
+                            ('add_elif', type(_self).__name__))
         else:
             return _self.last_branch.add_elif(_expr, **_kw)
 
     def add_else(_self):
         if _self.last_branch is None:
-            raise TypeError('Last statement was not branching')
+            raise TypeError('%r not allowed on %r' %
+                            ('add_else', type(_self).__name__))
         else:
-            return _self.last_branch.else_blk
+            return _self.last_branch.add_else()
 
     def add_try(_self, **_kw):
         return _self.add(BWTryBlock(**_kw))
@@ -608,9 +767,17 @@ class BWCodeBlock(object):
 
     def add_except(_self, _type=None, _var=None, **_kw):
         if _self.last_branch is None:
-            raise TypeError('Last statement was not branching')
+            raise TypeError('%r not allowed on %r' %
+                            ('add_except', type(_self).__name__))
         else:
-            return _self.last_branch.add_except(_expr, _var, **_kw)
+            return _self.last_branch.add_except(_type, _var, **_kw)
+
+    def add_finally(_self):
+        if _self.last_branch is None:
+            raise TypeError('%r not allowed on %r' %
+                            ('add_finally', type(_self).__name__))
+        else:
+            return _self.last_branch.add_finally()
 
     def __str__(self):
         return '\n'.join(self)
@@ -679,8 +846,8 @@ class BWElsingBlock(BWPassingBlock):
         else:
             return ()
 
-    def is_terminal(self):
-        return (super(BWElsingBlock, self).is_terminal and
+    def check_terminal(self):
+        return (super(BWElsingBlock, self).check_terminal() and
                 self.else_blk.is_terminal)
 
 class BWForBlock(BWElsingBlock):
@@ -725,6 +892,14 @@ class BWIfBlock(BWElsingBlock):
         return (self.elif_blks +
                 super(BWIfBlock, self).get_else_blocks(all_peers))
 
+    def check_terminal(self):
+        if not super(BWIfBlock, self).check_terminal():
+            return False
+        for elif_blk in self.elif_blks:
+            if not elif_blk.is_terminal:
+                return False
+        return True
+
 class BWElifBlock(BWPassingBlock):
     def __init__(_self, _expr, **_kw):
         super(BWElifBlock, _self).__init__ \
@@ -736,7 +911,7 @@ class BWElseBlock(BWPassingBlock):
         super(BWElseBlock, _self).__init__ \
             ('else:', **_kw)
 
-class BWTryBlock(BWElifingBlock):
+class BWTryBlock(BWElsingBlock):
     branches = True
 
     def __init__(_self, **_kw):
@@ -748,13 +923,35 @@ class BWTryBlock(BWElifingBlock):
         return ()
 
     def add_except(_self, _type=None, _var=None, **_kw):
-        blk = BEExceptBlock(_type, _var, **_kw)
+        blk = BWExceptBlock(_type, _var, **_kw)
         _self.except_blocks += (blk,)
         return blk
 
+    @cached
+    def finally_blk(self):
+        return BWFinallyBlock()
+
+    def add_finally(self):
+        return self.finally_blk
+
     def get_else_blocks(self, all_peers):
-        return (self.except_blocks +
-                super(BWIfBlock, self).get_else_blocks(all_peers))
+        if all_peers or len(self.finally_blk.block):
+            return (self.except_blocks +
+                    super(BWTryBlock, self).get_else_blocks(all_peers) +
+                    (self.finally_blk,))
+        else:
+            return (self.except_blocks +
+                    super(BWTryBlock, self).get_else_blocks(all_peers))
+
+    def check_terminal(self):
+        if not super(BWElsingBlock, self).check_terminal():
+            return False
+        if len(self.finally_blk.block) and not self.finally_blk.is_terminal:
+            return False
+        for except_blk in self.except_blocks:
+            if not except_blk.is_terminal:
+                return False
+        return True
 
 class BWExceptBlock(BWPassingBlock):
     def __init__(_self, _type=None, _var=None, **_kw):
@@ -768,10 +965,15 @@ class BWExceptBlock(BWPassingBlock):
                 types = (_type,)
             if _var is None:
                 super(BWExceptBlock, _self).__init__ \
-                    ('except %s:' % ', '.join(_type), **_kw)
+                    ('except (%s):' % ', '.join(types), **_kw)
             else:
                 super(BWExceptBlock, _self).__init__ \
-                    ('except %s, %s:' % (', '.join(_type), _var), **_kw)
+                    ('except (%s), %s:' % (', '.join(types), _var), **_kw)
+
+class BWFinallyBlock(BWPassingBlock):
+    def __init__(_self, **_kw):
+        super(BWFinallyBlock, _self).__init__ \
+            ('finally:', **_kw)
 
 class BWFunctionBlock(BWPassingBlock):
     kwall = None
