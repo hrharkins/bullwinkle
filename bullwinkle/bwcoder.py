@@ -603,8 +603,14 @@ class BWCodeBlock(object):
     def add_try(_self, **_kw):
         return _self.add(BWTryBlock(**_kw))
 
+#    def add_except(_self, _type=None, _var=None, **_kw):
+#        return _self.add(BWExceptBlock(_type, _var, **_kw))
+
     def add_except(_self, _type=None, _var=None, **_kw):
-        return _self.add(BWExceptBlock(_type, _var, **_kw))
+        if _self.last_branch is None:
+            raise TypeError('Last statement was not branching')
+        else:
+            return _self.last_branch.add_except(_expr, _var, **_kw)
 
     def __str__(self):
         return '\n'.join(self)
@@ -730,16 +736,27 @@ class BWElseBlock(BWPassingBlock):
         super(BWElseBlock, _self).__init__ \
             ('else:', **_kw)
 
-class BWTryBlock(BWPassingBlock):
+class BWTryBlock(BWElifingBlock):
     branches = True
 
     def __init__(_self, **_kw):
         super(BWTryBlock, _self).__init__ \
             ('try:', **_kw)
 
-class BWExceptBlock(BWPassingBlock):
-    branches = True
+    @cached
+    def except_blocks(self):
+        return ()
 
+    def add_except(_self, _type=None, _var=None, **_kw):
+        blk = BEExceptBlock(_type, _var, **_kw)
+        _self.except_blocks += (blk,)
+        return blk
+
+    def get_else_blocks(self, all_peers):
+        return (self.except_blocks +
+                super(BWIfBlock, self).get_else_blocks(all_peers))
+
+class BWExceptBlock(BWPassingBlock):
     def __init__(_self, _type=None, _var=None, **_kw):
         if _type is None:
             super(BWExceptBlock, _self).__init__ \
