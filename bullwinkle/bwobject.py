@@ -163,14 +163,7 @@ class BWObject(object):
     __positional__ = ()
     __bwformat__ = None
 
-    @classcahced
-    def __init__(_cls):
-        if self.__bwinit__ is not None:
-            return self.__bwinit__
-        else:
-            return lambda _self: None
-
-    def ___init__(_self, *_args, **_kw):
+    def __init__(_self, *_args, **_kw):
         positional = _self.__positional__
         if len(_args) > len(positional):
             raise TypeError(

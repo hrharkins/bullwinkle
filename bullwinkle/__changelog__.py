@@ -5,10 +5,13 @@ __changelog__ -- contains the project changelog in object form.
 from bwversion import Version, WIPVersion, PlannedVersion, ChangeLog
 
 CHANGELOG = ChangeLog(
-    WIPVersion('0.3.7',
+    WIPVersion('0.3.8',
+        ),
+    Version('0.3.7',
         'Added more flavours of Version (WIPVersion, PlannedVersion)',
         'Fixed bug preventing Version subclasses from working',
         'Added .all property to ChangeLog to show planned versions',
+        'Added code generation toolkit for future rewrite of member',
         ),
     Version('0.3.6',
         'Fixed missing BWContext problem',

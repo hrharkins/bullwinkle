@@ -318,6 +318,9 @@ Except clauses can come in any of the Python forms:
 
 >>> blk = BWCodeBlock.anonymous()
 >>> try_blk = blk.add_try()
+>>> print try_blk
+try:
+    pass
 >>> try_blk.add_except()
 except:
     pass
@@ -486,6 +489,12 @@ be considered terminal (for, while, if, try):
 >>> returns_blk.is_terminal
 True
 
+Empty blocks are always non-terminal:
+
+>>> BWCodeBlock.anonymous().is_terminal
+False
+>>> BWCodeBlock.function('hello').is_terminal
+False
 '''
 
 from __version__ import *
@@ -565,9 +574,10 @@ class BWCodeBlock(object):
     def check_terminal(self):
         if self.terminal:
             return True
-        elif 'block' in self.__dict__:
+        elif 'block' in self.__dict__ and self.block:
             all_branches_terminal = True
-            for subblk in self.block:
+            # The following line will always have one element.
+            for subblk in self.block:       # pragma: no partial
                 if subblk.is_terminal:
                     return True
             else:
@@ -893,6 +903,37 @@ class BWIfBlock(BWElsingBlock):
                 super(BWIfBlock, self).get_else_blocks(all_peers))
 
     def check_terminal(self):
+        '''
+        Returns True if all branches of this if are terminal.
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_if('x < 0').add_return('True')
+        >>> blk.add_elif('x > 0').add_return('False')
+        >>> blk.add_else().add_return('None')
+        >>> blk.is_terminal
+        True
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_if('x < 0').add_print(repr('HERE'))
+        >>> blk.add_elif('x > 0').add_return('False')
+        >>> blk.add_else().add_return('None')
+        >>> blk.is_terminal
+        False
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_if('x < 0').add_return('True')
+        >>> blk.add_elif('x > 0').add_print(repr('HERE'))
+        >>> blk.add_else().add_return('None')
+        >>> blk.is_terminal
+        False
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_if('x < 0').add_return('True')
+        >>> blk.add_elif('x > 0').add_return('False')
+        >>> blk.add_else().add_print(repr('HERE'))
+        >>> blk.is_terminal
+        False
+        '''
         if not super(BWIfBlock, self).check_terminal():
             return False
         for elif_blk in self.elif_blks:
@@ -944,9 +985,57 @@ class BWTryBlock(BWElsingBlock):
                     super(BWTryBlock, self).get_else_blocks(all_peers))
 
     def check_terminal(self):
+        '''
+        Returns True if all branches of this if are terminal.
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_try().add_return('True')
+        >>> blk.add_except('TypeError').add_return('True')
+        >>> blk.add_else().add_return('True')
+        >>> blk.is_terminal
+        True
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_try().add_return('True')
+        >>> blk.is_terminal
+        True
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_try().add_print(repr('HERE'))
+        >>> blk.add_except('TypeError').add_return('True')
+        >>> blk.add_else().add_return('True')
+        >>> blk.is_terminal
+        False
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_try().add_return('True')
+        >>> blk.add_except('TypeError').add_print(repr('HERE'))
+        >>> blk.add_else().add_return('True')
+        >>> blk.is_terminal
+        False
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_try().add_return('True')
+        >>> blk.add_except('TypeError').add_return('True')
+        >>> blk.add_else().add_print(repr('HERE'))
+        >>> blk.is_terminal
+        False
+
+        If the finally block is terminal, then the try block is guaranteed
+        terminal:
+
+        >>> blk = BWCodeBlock.anonymous()
+        >>> blk.add_try().add_print(repr('HERE'))
+        >>> blk.add_except('TypeError').add_print(repr('HERE'))
+        >>> blk.add_else().add_print(repr('HERE'))
+        >>> blk.add_finally().add_return('True')
+        >>> blk.is_terminal
+        True
+
+        '''
+        if len(self.finally_blk.block) and self.finally_blk.is_terminal:
+            return True
         if not super(BWElsingBlock, self).check_terminal():
-            return False
-        if len(self.finally_blk.block) and not self.finally_blk.is_terminal:
             return False
         for except_blk in self.except_blocks:
             if not except_blk.is_terminal:
