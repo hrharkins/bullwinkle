@@ -851,20 +851,14 @@ class BWElsingBlock(BWPassingBlock):
                 self.get_else_blocks(all_peers))
 
     def get_else_blocks(self, all_peers):
-        if 'else_blk' in self.__dict__:
-            if all_peers or len(self.else_blk.block):
-                return (self.else_blk,)
-            else:
-                return ()
+        if all_peers or len(self.else_blk.block):
+            return (self.else_blk,)
         else:
             return ()
 
     def check_terminal(self):
-        if 'else_blk' in self.__dict__:
-            return (super(BWElsingBlock, self).check_terminal() and
-                    self.else_blk.is_terminal)
-        else:
-            return super(BWElsingBlock, self).check_terminal()
+        return (super(BWElsingBlock, self).check_terminal() and
+                self.else_blk.is_terminal)
 
 class BWForBlock(BWElsingBlock):
     branches = True
@@ -1041,7 +1035,7 @@ class BWTryBlock(BWElsingBlock):
         '''
         if len(self.finally_blk.block) and self.finally_blk.is_terminal:
             return True
-        if not super(BWTryBlock, self).check_terminal():
+        if not super(BWElsingBlock, self).check_terminal():
             return False
         for except_blk in self.except_blocks:
             if not except_blk.is_terminal:
