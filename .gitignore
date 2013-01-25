@@ -2,3 +2,4 @@
 .coverage
 coverage/*.coverage
 coverage/results
+*,cover
