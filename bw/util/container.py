@@ -23,7 +23,7 @@ class ChainedDict(object):
     >>> d1 = dict(x=5, z=9)
     >>> d2 = dict(y=7, z=3)
 
-    Now suppose we want an object that can draw for either one:
+    Now suppose we want an object that can from for either one:
 
     >>> cd = ChainedDict(d1, d2)
     >>> cd['x']
