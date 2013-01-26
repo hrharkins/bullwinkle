@@ -185,7 +185,7 @@ class ChainedDict(object):
         for base in reversed(self.__bases__):
             if hasattr(base, '__rdro__'):
                 for d in base.__rdro__:
-                    if id(d) not in found:  # pragma: no branch
+                    if id(d) not in found:  # pragma: branch no cover
                                             # -- says doesn't jump to line
                                             #   above, even with dupe...?
                         found.add(id(d))

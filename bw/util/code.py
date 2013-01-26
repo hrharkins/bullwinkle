@@ -8,9 +8,8 @@ class CodeBlock(list):
     Summary
     =======
 
-    A code block is a single entry within a tree of Python code that can be
-    managed (and eventually compiled, printed, etc).  A code block is a
-    list of contained strings (statements), sequences (anonymous
+    A code block contains a tree of objects that can produce Python code
+    It is a list of contained strings (statements), sequences (anonymous
     subsections), and other code blocks.  Code blocks also maintain a set of
     variables that are pertainent to the block to be provided during
     compilation.

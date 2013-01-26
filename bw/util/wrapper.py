@@ -1,7 +1,12 @@
 
+import types
 NULL = type(None)
 
-def wrapper(wrap_fn=None, auto_name=True, auto_doc=True):
+ALLOWED_TYPES = (types.MethodType, types.FunctionType,
+                 types.BuiltinMethodType, types.BuiltinFunctionType)
+
+def wrapper(wrap_fn=None, auto_name=True, auto_doc=True,
+                          allowed_types=ALLOWED_TYPES):
     '''Simplifies and unifies the function wrapping operation.
 
     =======
@@ -131,12 +136,13 @@ def wrapper(wrap_fn=None, auto_name=True, auto_doc=True):
 
     if wrap_fn is None:
         return lambda f: wrapper(f, auto_name=auto_name,
-                                    auto_doc=auto_doc)
+                                    auto_doc=auto_doc,
+                                    allowed_types=allowed_types)
     else:
         def builder(_fn=None, *_args, **_kw):
             if _fn is None:
                 return lambda f: builder(f, **_kw)
-            elif not callable(_fn):
+            elif not isinstance(_fn, allowed_types):
                 return lambda f: builder(f, _fn, *_args, **_kw)
             else:
                 result = wrap_fn(_fn, *_args, **_kw)
