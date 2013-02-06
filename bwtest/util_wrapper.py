@@ -1,5 +1,5 @@
 import unittest
-from bw.util.wrapper import *
+from bw.util import wrapper, wrapper_method, cached, NULL, Volatile
 
 class TestWrapper(unittest.TestCase):
     def test_simple(self):
@@ -262,4 +262,23 @@ class TestCached(unittest.TestCase):
         self.assertEqual('Hello', l.thrown)
         self.assertEqual('Hello', l.thrown)
         self.assertEqual(6, l.called)
+
+    def test_wrapper_method(self):
+        class Paren(object):
+            def __init__(self, left='(', right=')'):
+                self.left = left
+                self.right = right
+
+            @wrapper_method
+            def wrap(fn, self):
+                def wrapped(*_args, **_kw):
+                    return '%s%s%s' % (self.left, fn(*_args, **_kw), self.right)
+                return wrapped
+
+        p = Paren()
+        @p.wrap
+        def hello():
+            return 'hello'
+
+        self.assertEqual('(hello)', hello())
 

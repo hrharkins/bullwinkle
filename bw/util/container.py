@@ -31,6 +31,27 @@ class ChainedDict(object):
     >>> cd['y']
     7
 
+    Most normal dictionary options can still be performed:
+
+    >>> cd['x'] = 8
+    >>> cd['x']
+    8
+    >>> d1['x']
+    5
+    >>> del cd['x']
+    >>> cd['x']
+    5
+    >>> cd.pop('z', 'not found')
+    'not found'
+    >>> cd.pop('z')
+    Traceback (most recent call last):
+        ...
+    KeyError: 'z'
+    >>> cd.update(a='a')
+    >>> cd['a']
+    'a'
+
+
     =============
     Base Ordering
     =============
@@ -151,6 +172,7 @@ class ChainedDict(object):
     >>> cd = ChainedDict(adder, _y=5)
     >>> cd['y']
     6
+
     '''
 
     __storage_factory__ = dict
@@ -177,6 +199,21 @@ class ChainedDict(object):
             raise KeyError(key)
         else:
             return obj
+
+    def __setitem__(self, key, value):
+        self.__storage__[key] = value
+
+    def __delitem__(self, key):
+        del self.__storage__[key]
+
+    def pop(self, key, default=NULL):
+        if default is NULL:
+            return self.__storage__.pop(key)
+        else:
+            return self.__storage__.pop(key, default)
+
+    def update(self, *_args, **_kw):
+        self.__storage__.update(*_args, **_kw)
 
     @cached
     def __rdro__(self):

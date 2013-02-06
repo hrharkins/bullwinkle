@@ -6,7 +6,7 @@ ALLOWED_TYPES = (types.MethodType, types.FunctionType,
                  types.BuiltinMethodType, types.BuiltinFunctionType)
 
 def wrapper(wrap_fn=None, auto_name=True, auto_doc=True,
-                          allowed_types=ALLOWED_TYPES):
+                          method=False, allowed_types=ALLOWED_TYPES):
     '''Simplifies and unifies the function wrapping operation.
 
     =======
@@ -137,9 +137,16 @@ def wrapper(wrap_fn=None, auto_name=True, auto_doc=True,
     if wrap_fn is None:
         return lambda f: wrapper(f, auto_name=auto_name,
                                     auto_doc=auto_doc,
+                                    method=method,
                                     allowed_types=allowed_types)
     else:
         def builder(_fn=None, *_args, **_kw):
+            # If method type of wrapper, reverse _fn and _args since the
+            # instance is in the first position.
+            if method and _fn and _args:
+                o = _fn
+                _fn = _args[0]
+                _args = (o,) + _args[1:]
             if _fn is None:
                 return lambda f: builder(f, **_kw)
             elif not isinstance(_fn, allowed_types):
@@ -160,6 +167,33 @@ def wrapper(wrap_fn=None, auto_name=True, auto_doc=True,
         builder.__doc__ = wrap_fn.__doc__
         builder.__dict__.update(wrap_fn.__dict__)
         return builder
+
+def wrapper_method(*_args, **_kw):
+    '''
+    Helper for method-based wrappers, required to make sure the arguments
+    are in the right order when Python inserts "self" on the method call.
+    Note that this puts the function as the first argument, then the "self"
+    then other arguments.
+
+    >>> class Paren(object):
+    ...     def __init__(self, left='(', right=')'):
+    ...         self.left = left
+    ...         self.right = right
+    ...
+    ...     @wrapper_method
+    ...     def wrap(fn, self):
+    ...         def wrapped(*_args, **_kw):
+    ...             return '%s%s%s' % (self.left, fn(*_args, **_kw), self.right)
+    ...         return wrapped
+
+    >>> p = Paren()
+    >>> @p.wrap
+    ... def hello():
+    ...     return 'hello'
+    >>> hello()
+    '(hello)'
+    '''
+    return wrapper(*_args, method=True, **_kw)
 
 @wrapper(auto_name=False, auto_doc=False)
 def cached(fn, name=None):
