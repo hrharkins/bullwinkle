@@ -1,6 +1,7 @@
 
 from wrapper import cached
 from container import NOT_FOUND, ChainedDict
+import sys
 
 class CodeBlock(list):
     '''Manages an abstract scaffold for building code on-the-fly,
@@ -209,7 +210,10 @@ class CodeBlock(list):
     def result(self):
         d = {}
         self.__addvars__(d)
-        exec self.compiled in d
+        try:
+            exec self.compiled in d
+        except Exception, e:    # pragma: doctest no cover
+            raise EvalError(self), None, sys.exc_info()[2]
         class CompiledResult(object):
             pass
         o = CompiledResult()
@@ -220,18 +224,27 @@ class CodeBlock(list):
         d = {}
         self.__addvars__(d)
         d.update(_kw)
-        exec self.compiled in d
+        try:
+            exec self.compiled in d
+        except Exception, e:    # pragma: doctest no cover
+            raise EvalError(self), None, sys.exc_info()[2]
         return d[name]
 
     @cached
     def compiled(self):
-        return compile(str(self), '', 'exec')
+        try:
+            return compile(str(self), '', 'exec')
+        except Exception, e:    # pragma: doctest no cover
+            raise CompileError(self), None, sys.exc_info()[2]
 
     def run(self, **_kw):
         d = {}
         self.__addvars__(d)
         d.update(_kw)
-        exec self.compiled in d
+        try:
+            exec self.compiled in d
+        except Exception, e:    # pragma: doctest no cover
+            raise EvalError(self), None, sys.exc_info()[2]
 
     listiter = list.__iter__
 
@@ -332,4 +345,18 @@ class CodeBlock(list):
 
     def __exit__(self, *_args):
         pass
+
+class CompileError(Exception):  # pragma: doctest no cover
+    def __init__(self, src):
+        self.src = src
+
+    def __str__(self):
+        return 'While compiling:\n%s\n' % self.src
+
+class EvalError(Exception): # pragma: doctest no cover
+    def __init__(self, src):
+        self.src = src
+
+    def __str__(self):
+        return 'While evaluating:\n%s\n' % self.src
 

@@ -7,11 +7,11 @@ class BWConstrainable(object):
     def __contains__(self, obj):        # self might be type.
         return obj in self.__bwconstraint__
 
-    def __not__(self):
-        return self.NOT(self)
-
     def __neg__(self):
         return self.NOT(self)
+
+    def __invert__(self):
+        return -self
 
     def __or__(self, other):
         return self.ANY(self, other)
@@ -88,7 +88,7 @@ class BWConstrainable(object):
 
     @classmethod
     def NE(cls, *objs, **_kw):
-        return cls.equal_to_factory(*objs, **_kw)
+        return cls.not_equal_to_factory(*objs, **_kw)
 
     @classmethod
     def LT(cls, *objs, **_kw):
@@ -106,8 +106,8 @@ class BWConstrainable(object):
     def GTE(cls, *objs, **_kw):
         return cls.greater_than_or_equal_to_factory(*objs, **_kw)
 
-    def __repr__(self):
-        return '<none>'
+    def __repr__(self):     # pragma: doctest no cover
+        return '<never>'
 
 IS = BWConstrainable.IS
 DOES = BWConstrainable.DOES
@@ -133,10 +133,10 @@ class BWMeta(type, BWConstrainable):
             if fn is not None:
                 fn(cls, base)
 
-    def ___new__(meta, typename, typebases, typedict):
-        # Create a new meta-base for each BWSimpleObject type.  This
-        # allows us to insert things via meta_method as well as make
-        # suer we don't have issues with external base classes being
+    def ___new__(meta, typename, typebases, typedict):  #pragma: doctest no cover
+        # Create a new meta-base for each BWObject type.  This
+        # allows us to insert class things via meta_method as well as 
+        # make sure we don't have issues with external base classes being
         # mixed with this meta-class (ORM's are common issues otherwise).
         if '__bwmeta__' not in typedict:
             # Compute the base meta-classes of all base classes of the new
@@ -172,6 +172,7 @@ class BWMeta(type, BWConstrainable):
 
     def init_inline(cls, fn):
         cls.__bwinit_inline__ += (fn,)
+        return fn
 
     @wrapper(method=True)
     def meta_method(fn, cls):
@@ -208,9 +209,9 @@ class BWMeta(type, BWConstrainable):
         return {}
 
     def register(cls, target=None, name=None):
-        if target is None and name is None:
+        if target is None and name is None:     # pragma: doctest no cover
             return lambda c: register(c)
-        elif isinstance(target, basestring):
+        elif isinstance(target, basestring):    # pragma: doctest no cover
             return lambda c: register(c, target)
         else:
             name = name or target.__name__
@@ -236,69 +237,8 @@ class BWMeta(type, BWConstrainable):
         return cls.isa_factory(*options, **_kw)
 
 # Necessary to deal with Python2/3 compatability
-BWSimpleObject = BWMeta('BWSimpleObject', (object,), dict(
-    __doc__ = 'A light-weight BWObject without automatic '
-              'initializer generation',
-    __bwchain__ = lambda _s, *_a, **_kw: super(BWSimpleObject, _s).__init__(),
-    __get_bwconstraint__ = classmethod(lambda c: BWTypeConstraint(c)),
-))
-
-@BWSimpleObject.meta_method
-def __bwsetup__(cls, base):
-    # Scan for local binders first
-    callbacks = []
-    name_sequences = {}
-    for name in cls.__dict__:
-        value = cls.__dict__[name]
-        if isinstance(value, MethodType): # pragma: doctest no cover
-            fn = getattr(value.im_func, '__bwbind__', None)
-            sequence = getattr(value.im_func, '__bwbindorder__', 0)
-        else:
-            fn = getattr(value, '__bwbind__', None)
-            sequence = getattr(value, '__bwbindorder__', 0)
-        if fn is not None:
-            if fn is True:
-                fn = value      # pragma: doctest no cover
-            callbacks.append((sequence, name, fn))
-    callbacks.sort()
-    callbacks = cls.__bwcallbacks__ = tuple(callbacks)
-
-    # Exend with binders from base classes that need also be called.
-    for base in cls.__mro__:
-        for callback in getattr(base, '__bwcallbacks__', ()):
-            if callback not in callbacks:
-                sequence, name, fn = callback
-                rebind = getattr(fn, '__bwrebind__', None)
-                if rebind is not None:
-                    if rebind is True:
-                        rebind = fn
-                    callbacks += ((sequence, name, rebind),)
-
-    # Next, apply the callbacks.  These should now be in order of:
-    #
-    # 1. Proximity to this class
-    # 2. Sequence if specified
-    # 3. Name of the method
-    #
-    # While doing this, we'll keep track of the values from higher
-    # priority bidings to allow binders that support __bwrebind__ to be
-    # called later.
-    #
-    metainfo = dict()
-    for sequence, name, fn in callbacks:
-        replacement = fn(cls, name, metainfo.get(name, getattr(cls, name)))
-        if replacement is not None:
-            metainfo[name] = replacement
-
-    # Finally, update the class with any replacements specified.
-    for name, value in metainfo.items():
-        if value is NULL:
-            delattr(cls, name)
-        else:
-            setattr(cls, name, value)
-BWSimpleObject.__bwsetup__
-
-class BWObject(BWSimpleObject):
+BWObject = BWMeta('BWObject', (object,), dict(
+    __doc__ = 
     '''Base for all Bullwinkle-enhanced Python classes.
 
     =======
@@ -499,65 +439,6 @@ class BWObject(BWSimpleObject):
     ValueError: invalid literal for int() with base 10: 'blah'
 
     ======================
-    Constructor Management
-    ======================
-
-    Initialization for BWObject instances is slightly different than for
-    regular Python instances:
-
-    1. __init__ is called as normal.
-    2. BWObject's __init__ calls __bwinit__
-    3. __bwinit__ is a method defined on *every* BWObject subclass that
-        sets up automated things for the object.
-    4. __bwchain__ is called to determine what arguments to send on to base
-        classes of the BWObject subclass.
-
-    Any binding member can add code to __bwinit__ by adding an
-    init_inline function via @BWObject.init_inline:
-
-    >>> class Field(object):
-    ...     sequence = 0
-    ...
-    ...     def __init__(self, accept, default=NULL):
-    ...         self.accept = accept
-    ...         self.default = default
-    ...         type(self).sequence += 1
-    ...         self.__bwbindorder__ = self.sequence
-    ...
-    ...     def __bwbind__(self, cls, name, value):
-    ...         self.name = name
-    ...         #import pdb; pdb.set_trace()
-    ...         @cls.init_inline
-    ...         def setup_member(cls, blk):
-    ...             if self.default is not NULL:
-    ...                 blk.kwargs[name] = self.default
-    ...             else:
-    ...                 blk.args.append(name)
-    ...             var = blk.anon(self.accept)
-    ...             if_blk = blk.add('if not isinstance(%s, %s):', name, var)
-    ...             if_blk.add('raise TypeError("%s must be a %s")'
-    ...                 % (name, type.__name__))
-    ...             blk.add('_self.%s = %s' % (name, name))
-
-    >>> class Table(BWObject):
-    ...     id = Field(int, default=0)
-    ...     data = Field(str)
-
-    >>> t = Table(data='hello')
-    >>> t.id
-    0
-    >>> t.data
-    'hello'
-
-    By constructing a Python function on-the-fly, BWObject initialization
-    should perform around 3X (or less) slower than a normal Python
-    initialization path.  This is a trade-off between convenience and
-    speed.  In most cases, this is not too painful, but subclasses are
-    always free to define their own __init__ path that avoids BWOject's by
-    subclassing BWSimpleObject instead, allowing for member binding but
-    without the automatic creation of initialization magic.
-
-    ======================
     Binding without Values
     ======================
 
@@ -616,17 +497,146 @@ class BWObject(BWSimpleObject):
     >>> Sub.y
     ['Base', 'Sub']
 
+    ''',
+    __bwinit_inline__ = (),
+    __bwchain__ = lambda _s, *_a, **_kw: super(BWObject, _s).__init__(),
+    __get_bwconstraint__ = classmethod(lambda c: BWTypeConstraint(c)),
+))
+
+@BWObject.meta_method
+def __bwsetup__(cls, base):
+    # Scan for local binders first
+    callbacks = []
+    name_sequences = {}
+    for name in cls.__dict__:
+        value = cls.__dict__[name]
+        if isinstance(value, MethodType): # pragma: doctest no cover
+            fn = getattr(value.im_func, '__bwbind__', None)
+            sequence = getattr(value.im_func, '__bwbindorder__', 0)
+        else:
+            fn = getattr(value, '__bwbind__', None)
+            sequence = getattr(value, '__bwbindorder__', 0)
+        if fn is not None:
+            if fn is True:
+                fn = value      # pragma: doctest no cover
+            callbacks.append((sequence, name, fn))
+    callbacks.sort()
+    callbacks = cls.__bwcallbacks__ = tuple(callbacks)
+
+    # Exend with binders from base classes that need also be called.
+    for base in cls.__mro__:
+        for callback in getattr(base, '__bwcallbacks__', ()):
+            if callback not in callbacks:
+                sequence, name, fn = callback
+                rebind = getattr(fn, '__bwrebind__', None)
+                if rebind is not None:
+                    if rebind is True:
+                        rebind = fn
+                    callbacks += ((sequence, name, rebind),)
+
+    # Next, apply the callbacks.  These should now be in order of:
+    #
+    # 1. Proximity to this class
+    # 2. Sequence if specified
+    # 3. Name of the method
+    #
+    # While doing this, we'll keep track of the values from higher
+    # priority bidings to allow binders that support __bwrebind__ to be
+    # called later.
+    #
+    metainfo = dict()
+    for sequence, name, fn in callbacks:
+        replacement = fn(cls, name, metainfo.get(name, getattr(cls, name)))
+        if replacement is not None:
+            metainfo[name] = replacement
+
+    # Finally, update the class with any replacements specified.
+    for name, value in metainfo.items():
+        if value is NULL:
+            delattr(cls, name)
+        else:
+            setattr(cls, name, value)
+BWObject.__bwsetup__
+
+class BWSmartObject(BWObject):
+    '''Base for all Bullwinkle-enhanced Python classes.
+
+    =======
+    Summary
+    =======
+
+    BWSmartObject extends BWObject to provide automatic constructor
+    generation.
+
+    ======================
+    Constructor Management
+    ======================
+
+    Initialization for BWSmartObject instances is slightly different than for
+    regular Python instances:
+
+    1. __init__ is called as normal.
+    2. BWSmartObject's __init__ calls __bwinit__
+    3. __bwinit__ is a method defined on *every* BWSmartObject subclass that
+        sets up automated things for the object.
+    4. __bwchain__ is called to determine what arguments to send on to base
+        classes of the BWSmartObject subclass.
+
+    Any binding member can add code to __bwinit__ by adding an
+    init_inline function via @BWSmartObject.init_inline:
+
+    >>> class Field(object):
+    ...     sequence = 0
+    ...
+    ...     def __init__(self, accept, default=NULL):
+    ...         self.accept = accept
+    ...         self.default = default
+    ...         type(self).sequence += 1
+    ...         self.__bwbindorder__ = self.sequence
+    ...
+    ...     def __bwbind__(self, cls, name, value):
+    ...         self.name = name
+    ...         #import pdb; pdb.set_trace()
+    ...         @cls.init_inline
+    ...         def setup_member(cls, blk):
+    ...             if self.default is not NULL:
+    ...                 blk.kwargs[name] = self.default
+    ...             else:
+    ...                 blk.args.append(name)
+    ...             var = blk.anon(self.accept)
+    ...             if_blk = blk.add('if not isinstance(%s, %s):', name, var)
+    ...             if_blk.add('raise TypeError("%s must be a %s")'
+    ...                 % (name, type.__name__))
+    ...             blk.add('_self.%s = %s' % (name, name))
+
+    >>> class Table(BWSmartObject):
+    ...     id = Field(int, default=0)
+    ...     data = Field(str)
+
+    >>> t = Table(data='hello')
+    >>> t.id
+    0
+    >>> t.data
+    'hello'
+
+    By constructing a Python function on-the-fly, BWSmartObject initialization
+    should perform at most around 3X (or less) slower than a normal Python
+    initialization path.  This is a trade-off between convenience and
+    speed.  In most cases, this is not too painful, but subclasses are
+    always free to define their own __init__ path that avoids BWOject's by
+    subclassing BWObject instead, allowing for member binding but
+    without the automatic creation of initialization magic.
+
     '''
 
-    __bwinit_inline__ = ()
-    __bwtypes__ = BWSimpleObject.__bwtypes__
+    __bwtypes__ = BWObject.__bwtypes__
 
     def __init__(_self, *_args, **_kw):
         _self.__bwinit__(*_args, **_kw)
 
     def __bwsetup__(cls, base):
         #import sys; print >>sys.stderr, 'HERE', cls, base
-        # Run following BWSimpleObject's __bwsetup__
+        # Run following BWObject's __bwsetup__
 
         # And as an added bonus, set up __bwinit__.  This will be converted
         # into a real method on the first use.
@@ -657,6 +667,7 @@ class BWObject(BWSimpleObject):
 
             # Now use it.  This wrapper won't be called again for this
             # class.
+            #import sys; print >>sys.stderr, fnblk
             bwinit = cls.__bwinit__ = fnblk.extract('__bwinit__')
             bwinit.__source__ = str(fnblk)
             return _self.__bwinit__(*_args, **_kw)
@@ -701,6 +712,8 @@ class BWConstraint(BWObject, BWConstrainable):
 
     >>> PeanutButter() in -Chocolate
     True
+    >>> PeanutButter() in ~Chocolate                    # Also works
+    True
     >>> Chocolate() in NOT(PeanutButter)
     True
 
@@ -742,10 +755,20 @@ class BWConstraint(BWObject, BWConstrainable):
 
     >>> 'Hello' in ANY('Hello', 'world')
     True
-    >>> 5 in LT(7)
-    True
+    >>> (5 in EQ(5), 5 in EQ(7))
+    (True, False)
+    >>> (5 in NE(5), 5 in NE(7))
+    (False, True)
+    >>> (5 in LT(3), 5 in LT(5), 5 in LT(7))
+    (False, False, True)
+    >>> (5 in GT(3), 5 in GT(5), 5 in GT(7))
+    (True, False, False)
+    >>> (5 in LTE(3), 5 in LTE(5), 5 in LTE(7))
+    (False, True, True)
+    >>> (5 in GTE(3), 5 in GTE(5), 5 in GTE(7))
+    (True, True, False)
 
-    And can be grouped:
+    These can also be grouped:
 
     >>> 5 in int & LT(7) & GT(3)
     True
@@ -780,6 +803,20 @@ class BWConstraint(BWObject, BWConstrainable):
     >>> Thing() in c
     True
 
+    Registration can be made on regular Python classes as well:
+
+    >>> BWObject.register(int) is int
+    True
+    >>> 5 in ISA('int')
+    True
+
+    And can receive any name desired:
+
+    >>> BWObject.register(int, 'Int') is int
+    True
+    >>> 5 in ISA('Int')
+    True
+
     Sometimes, registration will happen in other class hierarchies outside
     of BWObject.  To allow for this, use ISA within that BWObject type:
 
@@ -795,6 +832,48 @@ class BWConstraint(BWObject, BWConstrainable):
     >>> MyType() in c
     True
 
+    Type registries can also be accessed via item accesso on the containing
+    class family:
+
+    >>> MyTypeFamily['MyType'] is MyType
+    True
+    >>> MyTypeFamily['UnknownType']
+    Traceback (most recent call last):
+        ...
+    KeyError: "No registered type 'UnknownType' in 'MyTypeFamily'"
+
+    ====================
+    Constraint Functions
+    ====================
+
+    Although constraints can be checked directly it is sometimes handy to
+    conver them to first class Python functions.  This can be done via the
+    cached function property:
+
+    >>> fn = ANY(int, str).function
+    >>> fn(5)
+    True
+    >>> fn('Hello')
+    True
+    >>> fn(5.0)
+    False
+
+    ================
+    NEVER and ALWAYS
+    ================
+
+    Two standard constraint objects exist to handle the none and all cases
+    for linking to other elements.
+
+    >>> NEVER, ALWAYS
+    (<never>, <always>)
+    >>> 5 in NEVER | int
+    True
+    >>> 5.0 in ALWAYS & float
+    True
+
+    These are expected to be used rarely but are included for completeness.
+
     '''
 
     def __contains__(self, obj, **_options):
@@ -807,32 +886,44 @@ class BWConstraint(BWObject, BWConstrainable):
     def check(self, obj, **_options):
         return False
 
+    @cached
+    def function(self):
+        blk = CodeBlock('def f(v):')
+        ok = lambda b, v: b.append('return True')
+        self.inline(blk, 'v', ok, None)
+        blk.append('return False')
+        return blk.result.f
+
     def inline(self, blk, var, proceed_factory, error_factory, **_options):
         if type(self) is BWConstraint:
-            if error_factory:
+            if error_factory:           # pragma: doctest no cover
                 blk.add(error_factory(blk, var, 'No value is acceptable'))
         else:
             check_var = blk.anon(self)
-            if proceed_factory:
+            if proceed_factory is not None:
                 if_blk = blk.add('if %s in %s:' % (var, check_var))
                 proceed_factory(if_blk, var)
                 if error_factory:
                     else_blk = blk.add('else:')
                     error_factory(else_blk, var, 'Did not match constraint')
-            elif error_factory:
+            elif error_factory is not None:         # pragma: doctest no cover
                 if_blk = blk.add('if %s not in %s:' % (var, check_var))
                 error_factory(if_blk, var, 'Did not match constraint')
+NEVER = BWConstraint()
 
-class BWNullCosntraint(BWConstraint):
+class BWNullConstraint(BWConstraint):
     def check(self, obj, **_options):
         return True
 
-    def inline(self, blk, var, proceed_factory, error_factory, **_options):
-        if proceed_factory:
+    def inline(self, blk, var,
+                     proceed_factory, error_factory,
+                     **_options):       # pragma: doctest no cover
+        if proceed_factory is not None:
             blk.add(proceed_factory(blk, var))
 
     def __repr__(self):
-        return '<any>'
+        return '<always>'
+ALWAYS = BWNullConstraint()
 
 class BWManyConstraint(BWConstraint):
     def __init__(self, *constraints):
@@ -844,7 +935,7 @@ class BWAnyConstraint(BWManyConstraint):
         for constraint in self.constraints:
             if constraint.check(obj, **_options):
                 return True
-        else:
+        else:   # pragma: doctest no cover
             return False
 
     def inline(self, blk, var, proceed_factory, error_factory, **_options):
@@ -854,10 +945,11 @@ class BWAnyConstraint(BWManyConstraint):
                 return constraint.inline(blk, var, proceed_factory,
                                          chainer, **_options)
             else:
-                return error_factory(blk, var, *_args, **_kw)
+                if error_factory is not None:
+                    return error_factory(blk, var, *_args, **_kw)
         return chainer(blk, var, proceed_factory, error_factory, **_options)
 
-    def __repr__(self):
+    def __repr__(self):     # pragma: doctest no cover
         return '(%s)' % '|'.join(
             '%r' % constraint for constraint in self.constraints)
 
@@ -871,17 +963,20 @@ class BWAllConstraint(BWManyConstraint):
         else:
             return True
 
-    def inline(self, blk, var, proceed_factory, error_factory, **_options):
+    def inline(self, blk, var,
+                     proceed_factory, error_factory,
+                     **_options):   # pragma: doctest no cover
         constraint_iter = iter(self.constraints)
         def chainer(blk, var, *_args, **_kw):
             for constraint in constraint_iter:
                 return constraint.inline(blk, var, chainer,
                                          error_factory, **_options)
             else:
-                return proceed_factory(blk, var, *_args, **_kw)
+                if proceed_factory is not None:
+                    return proceed_factory(blk, var, *_args, **_kw)
         return chainer(blk, var, proceed_factory, error_factory, **_options)
 
-    def __repr__(self):
+    def __repr__(self):     # pragma: doctest no cover
         return '(%s)' % ' & '.join(
             '%r' % constraint for constraint in self.constraints)
 
@@ -914,7 +1009,7 @@ class BWTypeConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return isinstance(obj, self.converted_values)
 
-    def __repr__(self):
+    def __repr__(self):         # pragma: doctest no cover
         values = tuple(value.__name__ if isinstance(value, type)
                             else '%s.%s' % (self.registry.__name__, value)
                        for value in self.values)
@@ -940,18 +1035,18 @@ class BWRoleConstraint(BWValueConstraint):
         else:
             return False
 
-    def __repr__(self):
+    def __repr__(self):     # pragma: doctest no cover
         values = tuple(value.__name__ if isinstance(value, type)
                             else '%s.%s' % (self.registry.__name__, value)
                        for value in self.values)
-        return '<isa %r>' % '|'.join(values)
+        return '<does %r>' % '|'.join(values)
 BWConstrainable.does_factory = BWRoleConstraint
 
 class BWEqualToConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return obj in self.values
 
-    def __repr__(self):
+    def __repr__(self):     # pragma: doctest no cover
         return '<in %r>' % '|'.join(repr(value) for value in self.values)
 BWConstrainable.equal_to_factory = BWEqualToConstraint
 
@@ -959,32 +1054,32 @@ class BWNotEqualToConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return obj not in self.values
 
-    def __repr__(self):
-        return '<in %r>' % '|'.join(repr(value) for value in self.values)
+    def __repr__(self):     # pragma: doctest no cover
+        return '<not in %r>' % '|'.join(repr(value) for value in self.values)
 BWConstrainable.not_equal_to_factory = BWNotEqualToConstraint
 
 class BWGreaterThanConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return all(obj > value for value in self.values)
 
-    def __repr__(self):
-        return '<GT %r>' % '|'.join(repr(value) for value in self.values)
+    def __repr__(self):     # pragma: doctest no cover
+        return '<GT %r>' % '&'.join(repr(value) for value in self.values)
 BWConstrainable.greater_than_factory = BWGreaterThanConstraint
 
 class BWLessThanConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return all(obj < value for value in self.values)
 
-    def __repr__(self):
-        return '<LT %r>' % '|'.join(repr(value) for value in self.values)
+    def __repr__(self):     # pragma: doctest no cover
+        return '<LT %r>' % '&'.join(repr(value) for value in self.values)
 BWConstrainable.less_than_factory = BWLessThanConstraint
 
 class BWGreaterThanOrEqualToConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return all(obj >= value for value in self.values)
 
-    def __repr__(self):
-        return '<GTE %r>' % '|'.join(repr(value) for value in self.values)
+    def __repr__(self):     # pragma: doctest no cover
+        return '<GTE %r>' % '&'.join(repr(value) for value in self.values)
 BWConstrainable.greater_than_or_equal_to_factory = \
     BWGreaterThanOrEqualToConstraint
 
@@ -992,8 +1087,8 @@ class BWLessThanOrEqualToConstraint(BWValueConstraint):
     def check(self, obj, **_options):
         return all(obj <= value for value in self.values)
 
-    def __repr__(self):
-        return '<LTE %r>' % '|'.join(repr(value) for value in self.values)
+    def __repr__(self):     # pragma: doctest no cover
+        return '<LTE %r>' % '&'.join(repr(value) for value in self.values)
 BWConstrainable.less_than_or_equal_to_factory = \
     BWLessThanOrEqualToConstraint
 
@@ -1005,20 +1100,52 @@ class BWFunctionConstraint(BWConstraint):
         _self.kw = _kw
 
     def check(_self, _obj, **_options):
-        if _self.options:
+        if _self.options:   # pragma: doctest no cover
             return _self.func(_obj, *_self.args, **dict(_self.kw, **_options))
         else:
             return _self.func(_obj, *_self.args, **_self.kw)
 BWConstrainable.ok_factory = BWFunctionConstraint
 
-NUMBER = ISA(int, float, complex)
-REAL = ISA(int, float)
+STRING = BWConstraint.register(ISA(str, unicode), 'STRING')
+NUMBER = BWConstraint.register(ISA(int, float, complex), 'NUMBER')
+REAL = BWConstraint.register(ISA(int, float), 'REAL')
 
 class BWMember(BWAnyConstraint):
-    '''
-    >>> class Point(BWObject):
-    ...     x = MEMBER(NUMBER, into=float, default=BUILDER('default_value'))
-    ...     y = MEMBER(NUMBER, into=float, default=BUILDER('default_value'))
+    '''Support for type-checking members.
+
+    =======
+    Summary
+    =======
+
+    Sometimes it is useful to validate the types of instance members to
+    make sure they are behaving correctly during set or construction.  To
+    facilitate this, bullwinkle provides a BWMember class that is used to
+    define type-checking properties that do other useful things as well:
+
+    * Builder of values from other attributes
+    * Caching of internal methods or functions
+    * Type conversion of contructed/set values
+    * Indirection of members and methods via attribute
+
+    =======
+    Example
+    =======
+
+    >>> class TagWrapper(BWSmartObject):
+    ...     tag = BWMember('STRING', into=str)
+    ...     endtag = BWMember(bool, into=bool, default=True)
+    ...     def __call__(self, s):
+    ...         if self.endtag:
+    ...             return '<%s>%s</%s>' % (self.tag, s, self.tag)
+    ...         else:
+    ...             return '<%s>%s' % (self.tag, s)
+    >>> wrapper = TagWrapper('b')
+    >>> wrapper('Hello')
+    '<b>Hello</b>'
+
+    >>> class Point(BWSmartObject):
+    ...     x = BWMember('NUMBER', into=float, builder='default_value')
+    ...     y = BWMember('NUMBER', into=float, builder='default_value')
     ...     default_value = lambda s: 0
 
     >>> p = Point()
@@ -1026,13 +1153,68 @@ class BWMember(BWAnyConstraint):
     0
     >>> p.y
     0
+
+    ==========
+    Delegation
+    ==========
+
+    Members can also define delegation properties, which are used to access
+    inner attribtues and values through outer members.  For instance,
+    suppose we have the a FilePath class that has an open method:
+
+    >>> class FilePath(BWSmartObject):   # Can also be regular Python object
+    ...     filename = BWMember('STRING', into=str)
+    ...     def open(self, mode='r'):
+    ...         # Replace fileobj value with open(...) for real.
+    ...         return '<file: %s>' % self.filename
+
+    Now the File class wants to be able to access the filename as well:
+
+    >>> class File(BWSmartObject):      # At least a BWObject is required
+    ...     fileobj = BWMember(into=str, required=False,
+    ...                        builder=lambda s: s.filepath.open())
+    ...     filepath = BWMember(FilePath, into=FilePath)
+    ...     filename = filepath.delegate()
+
+    >>> f = File(filename='test')   # Initializing filepath via delegation.
+    >>> f.fileobj
+    '<file: test>'
+    >>> f.filename      # No explicit indirection needed!
+    'test'
+
+    Delegation can be translated via alternative attributes as well:
+
+    >>> class Inner(BWSmartObject):
+    ...     label = BWMember(into=str)
+    >>> class Outer(BWSmartObject):
+    ...     label = BWMember(into=str)
+    ...     inner = BWMember(into=Inner)
+    ...     inner_label = inner.delegate('label')
+
+    >>> outer = Outer(label='hello', inner_label='test')
+    >>> outer.inner.label
+    'test'
+
     '''
+
+    delegates = ()
 
     def __init__(self, *_constraints, **_options):
         extra, kw = self.init(**_options)
         super(BWMember, self).__init__(*(_constraints + extra), **kw)
 
-    def init(self, default=NULL, into=(), lazy=None, **_kw):
+    def init(self, default=NULL, builder=None, #handles=None,
+                   required=True, into=(), lazy=None, **_kw):
+
+        self.required = required
+
+        #self.handles = handles
+
+        if builder is not None:
+            if getattr(builder, '__bwbuilder_wantsdefault__', False):
+                default = BUILDER(builder, default)
+            else:
+                default = BUILDER(builder)
         self.default = default
 
         if lazy is None:
@@ -1050,31 +1232,86 @@ class BWMember(BWAnyConstraint):
 
         return tuple(_extra), _kw
 
+    def delegate(self, gateway=None, cache=True, name=None):
+        if name is None:
+            def builder(cls, name, value):
+                return self.delegate(name if gateway is None else gateway,
+                                     cache=cache, name=name)
+            return BWObject.binder(builder)
+        else:
+            def alias(target):
+                return getattr(getattr(target, self.name), gateway)
+            self.delegates += ((name, gateway),)
+            return cached(alias) if cache else property(alias)
+
     def __bwbind__(self, cls, name, value):
+        self.name = name
         getter = self.make_getter(name)
         setter = self.make_setter(name)
         remover = self.make_remover(name)
 
+        # NOTE: I don't like the handles= forms, they make things less
+        # readable.  This code will allow for them though if needed in the
+        # future.
+
+        #if self.handles:
+        #    if isinstance(self.handles, (list, tuple, set)):
+        #        for handle in self.handles:
+        #            delegate = self.delegate(handle, name=handle)
+        #            setattr(cls, handle, delegate)
+        #    elif isinstance(self.handles, dict):
+        #        for outer, inner in self.handles.iteritems():
+        #            delegate = self.delegate(inner, name=outer)
+        #            setattr(cls, outer, delegate)
+        #    else:
+        #        delegate = self.delegate(self.handles, name=self.handles)
+        #        setattr(cls, self.handles, delegate)
+
         @cls.init_inline
-        def setup_member(cls, blk):
+        def setup_member(cls, blk, required=None, set_attr=True, name=name):
+            if required is None:
+                required = self.required
+            if self.delegates:
+                blk.kwargs[name] = NULL
+                for dest in self.into:
+                    # TODO: Handle multiple dests, exclude last try:
+                    try_blk = blk
+                    args = []
+                    for varname, delegate in self.delegates:
+                        args.append('%s=%s' % (delegate, varname))
+                        member = getattr(dest, delegate).__bwmember__
+                        member.__bwinit_maker__(cls, blk,
+                                                name=varname,
+                                                required=False,
+                                                set_attr=False)
+                    if_blk = try_blk.add(
+                        'if %s is %s:' % (name, blk.anon(NULL)))
+                    if_blk.append('%s = %s(%s)' %
+                                   (name, blk.anon(dest),
+                                    ', '.join(args)))
             if self.lazy:
                 blk.kwargs[name] = NULL
                 if_blk = blk.add('if %s is not %s:' % (name, blk.anon(NULL)))
                 if_blk.append('_self.%s = %s' % (name, name))
             else:
-                if self.default is NULL:
+                if self.delegates or not required:
+                    blk.kwargs[name] = NULL
+                elif not self.delegates and self.default is NULL:
                     blk.args.append(name)
                 else:
                     blk.kwargs[name] = self.default
-                blk.append('_self.%s = %s' % (name, name))
+                if set_attr:
+                    blk.append('_self.%s = %s' % (name, name))
+        self.__bwinit_maker__ = setup_member
 
         t = type(name, (object,), {})
         if getter:
             t.__get__ = getter
         if setter:
             t.__set__ = setter
-        if remover:
+        if remover:     # pragma: doctest no cvoer
             t.__delete__ = remover
+        t.__bwmember__ = self
         return t()
 
     def make_getter(self, name):
@@ -1132,8 +1369,17 @@ class BWMember(BWAnyConstraint):
 
     @staticmethod
     def builder(_name, *_args, **_kw):
-        def builder(self):
-            return getattr(self, _name)(*_args, **_kw)
+        if isinstance(_name, basestring):
+            def builder(self):
+                obj = getattr(self, _name)
+                if type(obj) is MethodType:
+                    return obj(*_args, **_kw)
+                else:
+                    return obj
+        elif isinstance(_name, type):
+            builder = lambda s: _name()
+        else:
+            builder = lambda s: _name(s)
         builder.__name__ = '<%s builder>' % _name
         builder.__bwbuilder__ = True
         return builder
@@ -1154,7 +1400,7 @@ class BWRole(BWObject):
     >>> class Painter(BWRole):
     ...     paint = BWRole.required_method('ctx')
 
-    >>> @Painter
+    >>> @Painter.apply
     ... class Widget(BWObject):
     ...     def paint(self, ctx):
     ...         print "Widget paint", ctx
@@ -1166,25 +1412,57 @@ class BWRole(BWObject):
     >>> w.paint('CTX')
     Widget paint CTX
 
+    Roles can be applied to instances as well:
+
+    >>> class OtherWidget(object):
+    ...     def paint(self, ctx):
+    ...         print "Other widget", ctx
+    >>> o = OtherWidget()
+    >>> Painter.apply(o) is o
+    True
+    >>> o in Painter
+    True
+
+    In addition, the required methods can be attached to the object itself
+    rather than it's type:
+
+    >>> class ExtraWidget(object):
+    ...     pass
+    >>> e = ExtraWidget()
+    >>> e in -Painter
+    True
+    >>> Painter.apply(e)
+    Traceback (most recent call last):
+        ...
+    TypeError: Role 'Painter' requires 'paint' in 'ExtraWidget instance'
+    >>> e.paint = lambda ctx: 'Extra paint ' + ctx
+    >>> Painter.apply(e) is e
+    True
+    >>> e in Painter
+    True
+
     '''
 
     __bwrequires__ = ()
 
-    def __new__(role, target):
+    @classmethod
+    def apply(role, target, instance=None):
         roledict = dict((name, value)
                         for name, value in role.__dict__.iteritems()
                         if name not in BWRole.__dict__)
         if isinstance(target, type):
+            checked = target if instance is None else instance
             for requirement in role.__dict__.get('__bwrequires__', ()):
-                requirement(target)
+                requirement(checked)
             for base in role.__bases__:
                 for requirement in getattr(base, '__bwrequires__', ()):
-                    requirement(target)
+                    requirement(checked)
             roles = (role,) + getattr(target, '__bwroles__', ())
             return type(target.__name__, (target,),
                         dict(roledict, __bwroles__=roles))
         else:
-            target.__dict__.update(roledict)
+            roled = role.apply(type(target), target)
+            target.__class__ = roled
             return target
 
     @classmethod
@@ -1204,21 +1482,32 @@ class BWRole(BWObject):
             def attrcheck(target):
                 value = getattr(target, name, NULL)
                 if value is NULL:
+                    targetname = (target.__name__
+                                  if isinstance(target, type)
+                                  else '%s instance' % type(target).__name__)
                     raise TypeError('Role %r requires %r in %r'
-                                    % (role.__name__, name, target.__name__))
+                                    % (role.__name__, name, targetname))
                 else:
                     func = getattr(value, 'im_func', value)
                     code = getattr(func, 'func_code', None)
                     if code is None:
+                        targetname = (target.__name__
+                                      if isinstance(target, type)
+                                      else '%s instance'
+                                           % type(target).__name__)
                         raise TypeError(
                             'Role %r expects a method %r in %r'
-                            % (role.__name__, name, target.__name__))
+                            % (role.__name__, name, targetname))
                     names = code.co_varnames[:code.co_argcount]
                     for arg in args:
                         if arg not in names:
+                            targetname = (target.__name__
+                                          if isinstance(target, type)
+                                          else '%s instance'
+                                               % type(target).__name__)
                             raise TypeError(
                                 'Role %r requires %r to accept %r in %r'
-                                % (role.__name__, name, arg, target.__name__))
+                                % (role.__name__, name, arg, targetname))
             return NULL
         return checker
 

@@ -2,7 +2,7 @@
 #
 #   Examples:
 #
-#   ./run_on_change ./coverage/coverage.sh
+#   ./run_on_change ./script/coverage.sh
 #
 
 CHECK=/tmp/check
