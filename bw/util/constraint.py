@@ -121,6 +121,7 @@ These are expected to be used rarely but are included for completeness.
 '''
 
 from consts import NULL, NOT_CONVERTED
+from container import ChainedDict
 from code import CodeBlock
 from wrapper import cached
 
@@ -265,6 +266,16 @@ LE = LTE = C.__le__
 GE = GTE = C.__ge__
 
 class Constraint(Constrainable):
+    types = ChainedDict()
+
+    @classmethod
+    def register(constraint_cls, cls=None, name=None):
+        if isinstance(cls, type):
+            constraint_cls.types[name or cls.__name__] = cls
+            return cls
+        else:
+            return lambda c: Constraint.register(c, name or cls)
+
     def __init__(self, *comparisons, **_config):
         self.comparisons = comparisons
         self.configure(**_config)
