@@ -286,7 +286,7 @@ class BWMember(AnyConstraint):
             blk.append('raise TypeError('
                             '("Cannot set %r to %%r: " + %r) %% value)'
                        % (name, msg))
-        self.inline(fn, 'value', success, error)
+        self.inline_check(fn, 'value', success, error)
 
     def make_remover(self, name):
         fn = CodeBlock('def del_%s(self, target):' % name)
