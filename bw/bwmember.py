@@ -1,9 +1,8 @@
 
 from bwobject import BWObject, BWSmartObject
-from bwconstraint import *
-from bw.util import NULL
+from bw.util import NULL, AnyConstraint
 
-class BWMember(BWAnyConstraint):
+class BWMember(AnyConstraint):
     '''Support for type-checking members.
 
     =======

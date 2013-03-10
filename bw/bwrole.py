@@ -1,6 +1,5 @@
 
 from bwobject import BWObject
-from bwconstraint import *
 
 class BWRole(BWObject):
     '''
