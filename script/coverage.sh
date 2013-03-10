@@ -9,7 +9,7 @@
 export PYTHONPATH=$PWD:$PYTHONPATH
 rm -f coverage/unittest.coverage coverage/doctest.coverage
 coverage run --rcfile=coverage/unittest.conf -m unittest bwtest
-coverage run --rcfile=coverage/doctest.conf -m doctest bw/*/*.py bw/*.py
+coverage run --rcfile=coverage/doctest.conf -m doctest bw/*/*.py #bw/*.py
 coverage html --rcfile=coverage/unittest.conf \
                 --title 'Bullwinkle UnitTest Coverage' \
                 -d coverage/results/unittest

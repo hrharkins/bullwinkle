@@ -1,6 +1,6 @@
 
 import types
-NULL = type(None)
+from consts import NULL
 
 ALLOWED_TYPES = (types.MethodType, types.FunctionType,
                  types.BuiltinMethodType, types.BuiltinFunctionType)
