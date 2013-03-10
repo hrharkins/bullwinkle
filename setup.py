@@ -30,7 +30,7 @@ setup(
     licesne = LICENSE,
     keywords = 'Moose OOP super',
     url = 'http://code.google.com/p/bullwinkle',
-    packages = ['bw'],
+    packages = ['bw', 'bw.util'],
     classifiers = [
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Developers',
