@@ -19,6 +19,7 @@ import sys
 VERSION=0.4
 AUTHOR='Rich Harkins'
 AUTHOR_EMAIL='rich.harkins@gmail.com'
+LICENSE='LGPL-3.0'
 
 setup(
     name = 'bullwinkle',
