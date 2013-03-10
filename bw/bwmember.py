@@ -1,6 +1,6 @@
 
 from bwobject import BWObject, BWSmartObject
-from bw.util import NULL, AnyConstraint
+from bw.util import NULL, AnyConstraint, CodeBlock
 
 class BWMember(AnyConstraint):
     '''Support for type-checking members.
