@@ -1,5 +1,6 @@
 
 from bwobject import BWObject
+from util import NULL
 
 class BWRole(BWObject):
     '''

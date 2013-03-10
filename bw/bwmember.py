@@ -1,6 +1,7 @@
 
 from bwobject import BWObject, BWSmartObject
-from bw.util import NULL, AnyConstraint, CodeBlock
+from bw.util import NULL, ISA, AnyConstraint, CodeBlock, cached
+from types import MethodType
 
 class BWMember(AnyConstraint):
     '''Support for type-checking members.
@@ -179,8 +180,13 @@ class BWMember(AnyConstraint):
     def __bwbind__(self, cls, name, value):
         self.name = name
         getter = self.make_getter(name)
-        setter = self.make_setter(name)
-        remover = self.make_remover(name)
+        setter = self.make_setter(name, getter is not None)
+        remover = self.make_remover(name, getter is not None)
+
+        # If we have a setter or remover remake the getter, in case the
+        # variable storage method matters.
+        if setter is not None or remover is not None:
+            getter = self.make_getter(name, True)
 
         # NOTE: I don't like the handles= forms, they make things less
         # readable.  This code will allow for them though if needed in the
@@ -244,34 +250,46 @@ class BWMember(AnyConstraint):
         if remover:     # pragma: doctest no cover
             t.__delete__ = remover
         t.__bwmember__ = self
+        #print name, dir(t)
         return t()
 
-    def make_getter(self, name):
+    def make_getter(self, name, has_setter=False):
         fn = CodeBlock('def get_%s(self, target, cls=None):' % name)
-        self.build_getter(fn, name)
-        if self.lazy:
-            builder = getattr(self.default, '__bwbuilder__', False)
-            if builder:
-                fn.append('return %s(target)' % fn.anon(self.default))
-            else:   # pragma: doctest no cover
-                fn.append('return %s' % fn.anon(self.default))
-        if fn:
+        fn.append('if target is None: return self')
+        if has_setter:
+            #blk.append('print %r, sorted(self.__dict__)' % name)
+            fn.add('value = target.__dict__.get(%r, AttributeError)' % name)
+            fn.append('if value is not AttributeError: return value')
+        blk = fn.block()
+        self.build_getter(blk, name, has_setter)
+        if blk:
+            #print fn
             return getattr(fn.result, 'get_' + name)
         else:       # pragma: doctest no cover
             return None
 
-    def build_getter(self, fn, name):
-        pass
+    def build_getter(self, fn, name, has_setter):
+        if self.lazy:
+            builder = getattr(self.default, '__bwbuilder__', False)
+            if builder:
+                fn.append('value = %s(target)' % fn.anon(self.default))
+            else:   # pragma: doctest no cover
+                fn.append('value = %s' % fn.anon(self.default))
+            #fn.append('print "DEFAULT", %r, value' % name)
+            #fn.append('print sorted(self.__dict__)')
+            fn.append('target.__dict__[%r] = value' % name)
+            #fn.append('print sorted(self.__dict__)')
+            fn.append('return value')
 
-    def make_setter(self, name):
+    def make_setter(self, name, has_getter=False):
         fn = CodeBlock('def set_%s(self, target, value):' % name)
-        self.build_setter(fn, name)
+        self.build_setter(fn, name, has_getter)
         if fn:
             return getattr(fn.result, 'set_' + name)
         else:       # pragma: doctest no cover
             return None
 
-    def build_setter(self, fn, name):
+    def build_setter(self, fn, name, has_getter):
         def success(blk, var):
             blk.append('target.__dict__[%r] = value' % name)
         def error(blk, var, msg):
@@ -288,15 +306,15 @@ class BWMember(AnyConstraint):
                        % (name, msg))
         self.inline_check(fn, 'value', success, error)
 
-    def make_remover(self, name):
+    def make_remover(self, name, has_getter=False):
         fn = CodeBlock('def del_%s(self, target):' % name)
-        self.build_remover(fn, name)
+        self.build_remover(fn, name, has_getter)
         if fn:      # pragma: doctest no cover
             return getattr(fn.result, 'del_' + name)
         else:
             return None
 
-    def build_remover(self, fn, name):
+    def build_remover(self, fn, name, has_getter):
         pass
 
     @staticmethod
@@ -320,16 +338,16 @@ class BWConstMember(BWMember):
     def make_getter(self, name):
         getter = super(BWConstMember, self).make_getter(name)
         def cacher(self, target, cls=None):
-            print self, self.__dict__
+            #print self, self.__dict__
             obj = getter(self, target)
             self.__dict__[name] = obj
             return obj
         return cacher
 
-    def make_setter(self, name):
+    def make_setter(self, name, has_getter=False):
         return None
 
-    def make_remover(self, name):
+    def make_remover(self, name, has_getter=False):
         return None
 
 MEMBER = BWMember

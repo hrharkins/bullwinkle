@@ -100,6 +100,16 @@ class BWMeta(type, Constrainable):
         _kw.setdefault('registry', cls)
         return cls.isa_factory(*options, **_kw)
 
+    @staticmethod
+    def positional(*names):
+        def positional_setup(target):
+            target.__bwpositional__ = names
+            return target
+        return positional_setup
+
+    def __contains__(self, obj):
+        return isinstance(obj, self) or self in getattr(obj, '__bwroles__', ())
+
 # Necessary to deal with Python2/3 compatability
 BWObject = BWMeta('BWObject', (object,), dict(
     __doc__ = 
@@ -492,6 +502,23 @@ class BWSmartObject(BWObject):
     subclassing BWObject instead, allowing for member binding but
     without the automatic creation of initialization magic.
 
+    ================================
+    Positional Member Initialization
+    ================================
+
+    To specify a set of variables that can be specified without keyword
+    assignments, wrap the class in @BWObject.positional.
+
+    >>> @BWObject.positional('x', 'y')
+    ... class Point(BWSmartObject):
+    ...     x = Field(int)
+    ...     y = Field(int)
+    >>> O = Point(0, 0)
+    >>> O.x
+    0
+    >>> O.y
+    0
+
     '''
 
     __bwtypes__ = BWObject.__bwtypes__
@@ -509,7 +536,7 @@ class BWSmartObject(BWObject):
         def __bwinit__(_self, *_args, **_kw):
             # Create the method via CodeBlock
             bwinit_blk = CodeBlock()
-            bwinit_blk.args = []
+            bwinit_blk.args = list(cls.__dict__.get('__bwpositional__', ()))
             bwinit_blk.kwargs = {}
             cls.__make_bwinit__(bwinit_blk)
 
@@ -519,8 +546,18 @@ class BWSmartObject(BWObject):
             # Wrap the block in a function declaration using the args
             # and kw to set things up.
             args = ['_self']
+            found = set()
             for arg in bwinit_blk.args:
-                args.append(arg)
+                if arg in found:
+                    continue
+                else:
+                    found.add(arg)
+                    default = bwinit_blk.kwargs.pop(arg, KeyError)
+                    if default is KeyError:
+                        args.append(arg)
+                    else:
+                        args.append('%s=%s'
+                                    % (name, bwinit_blk.anon(name, default)))
             for name in bwinit_blk.kwargs:
                 value = bwinit_blk.kwargs[name]
                 args.append('%s=%s'
