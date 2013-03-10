@@ -16,8 +16,15 @@ import sys
 #            print >>sys.stderr, ''
 #    sys.exit(1)
 
+VERSION=0.4
+AUTHOR='Rich Harkins'
+AUTHOR_EMAIL='rich.harkins@gmail.com'
+
 setup(
     name = 'bullwinkle',
+    version = VERSION,
+    author = AUTHOR,
+    author_email = AUTHOR_EMAIL,
     version = VERSION,
     author = AUTHOR,
     author_email = AUTHOR_EMAIL,
