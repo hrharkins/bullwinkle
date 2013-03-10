@@ -1,9 +1,10 @@
 
 from bw.util import NULL, wrapper, CodeBlock, cached, ChainedDict
-from bwconstrainable import BWConstrainable, ISA
+from bw.util import Constrainable
+#from bwconstrainable import BWConstrainable, ISA
 from types import MethodType
 
-class BWMeta(type, BWConstrainable):
+class BWMeta(type, Constrainable):
     def __init__(cls, typename, typebases, typedict):
         #import sys; print >>sys.stderr, 'BWMeta.__init__', cls
         super(BWMeta, cls).__init__(typename, typebases, typedict)
