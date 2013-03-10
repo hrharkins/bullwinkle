@@ -16,7 +16,7 @@ import sys
 #            print >>sys.stderr, ''
 #    sys.exit(1)
 
-VERSION=0.4
+VERSION='0.4-wip'
 AUTHOR='Rich Harkins'
 AUTHOR_EMAIL='rich.harkins@gmail.com'
 LICENSE='LGPL-3.0'
