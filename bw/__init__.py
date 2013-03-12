@@ -5,5 +5,6 @@
 from bwobject import BWObject, BWSmartObject
 from bwmember import BWMember, MEMBER, BUILDER, CONST
 from bwrole import BWRole
+from bwsuper import before_super, after_super, around_super
 from bw.util import *
 
