@@ -215,7 +215,9 @@ class CodeBlock(list):
         except Exception, e:    # pragma: doctest no cover
             raise EvalError(self), None, sys.exc_info()[2]
         class CompiledResult(object):
-            pass
+            @cached
+            def __getitem__(self):
+                return self.__dict__.__getitem__
         o = CompiledResult()
         o.__dict__.update(d)
         return o
