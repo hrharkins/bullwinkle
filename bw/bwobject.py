@@ -3,18 +3,22 @@ from bw.util import NULL, wrapper, CodeBlock, cached, ChainedDict
 from bw.util import Constrainable
 #from bwconstrainable import BWConstrainable, ISA
 from types import MethodType
+import pdb
 
 class BWMeta(type, Constrainable):
     def __init__(cls, typename, typebases, typedict):
-        #import sys; print >>sys.stderr, 'BWMeta.__init__', cls
-        super(BWMeta, cls).__init__(typename, typebases, typedict)
-        for base in reversed(cls.__mro__):
-            fn = base.__dict__.get('__bwsetup__')
-            #import sys; print >>sys.stderr, '__bwsetup__', base, list(typedict)
-            if fn is not None:
-                fn(cls, base)
+        # We're going to get here twice -- once after a proper metabase has
+        # been esblished, the other for the cls object that does not have
+        # the correct metabase.  We only run the inits in the case where
+        # the metaclass object has been set up.
+        if '__bwmeta__' in typedict:
+            super(BWMeta, cls).__init__(typename, typebases, typedict)
+            for base in reversed(cls.__mro__):
+                fn = base.__dict__.get('__bwsetup__')
+                if fn is not None:
+                    fn(cls, base)
 
-    def ___new__(meta, typename, typebases, typedict):  #pragma: doctest no cover
+    def __new__(meta, typename, typebases, typedict):  #pragma: doctest no cover
         # Create a new meta-base for each BWObject type.  This
         # allows us to insert class things via meta_method as well as 
         # make sure we don't have issues with external base classes being
@@ -24,27 +28,24 @@ class BWMeta(type, Constrainable):
             # class.
             metabases = [meta]
             found = set((id(meta),))
-            for base in metabases:
-                basemeta = type(base)
+            for base in typebases:
+                basemeta = getattr(base, '__metaclass__', type(base))
                 if id(basemeta) not in found:
                     found.add(id(basemeta))
                     metabases.append(basemeta)
-            #metabases = tuple(type(base) for base in typebases)
             metabases = tuple(metabases)
 
             # Now create a meta-class to use to create the class.
-            clsmeta = type('Meta<%s>' % typename, metabases, dict(typedict))
+            clsmeta = type('Meta<%s>' % typename, metabases, {})
 
-            import sys; print >>sys.stderr, '1>>>', meta, clsmeta
             # Finally, use that metaclass to do the actual construction.
             return clsmeta(typename, typebases,
-                            dict(typedict, __bwmeta__=True))
+                           dict(typedict, __bwmeta__=clsmeta))
         else:
-            import sys; print >>sys.stderr, '2>>>', meta, list(typedict)
+            # The metaclass is now derived from the bases.
             cls = super(BWMeta, meta).__new__(
                 meta, typename, typebases, dict(typedict, __bwmeta__=meta))
             #meta.__init__(cls, typename, typebases, typedict)
-            import sys; print >>sys.stderr, cls
             return cls
 
     def __make_bwinit__(cls, blk):
@@ -79,7 +80,7 @@ class BWMeta(type, Constrainable):
             name = '(' + cls.__name__ + ')<%s>' % ','.join(other)
             bases = (cls,)
             typedict = other
-        return type(name, bases, typedict)
+        return type(cls)(name, bases, typedict)
 
     @property
     def __bwconstraint__(cls):
