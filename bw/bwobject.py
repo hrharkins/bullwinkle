@@ -433,6 +433,7 @@ def __bwsetup__(cls, base):
         else:
             setattr(cls, name, value)
 BWObject.__bwsetup__
+positional = BWObject.positional
 
 class BWSmartObject(BWObject):
     '''Base for all Bullwinkle-enhanced Python classes.
