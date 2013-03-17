@@ -320,6 +320,7 @@ class BWMember(AnyConstraint):
     def builder(self, *_args, **_kw):
         def wrapper(fn):
             self.default = self.BUILDER(fn.__name__)
+            self.lazy = True
             return fn
         return wrapper
 
