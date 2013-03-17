@@ -116,6 +116,6 @@ class BWAroundCaller(BWSuperCaller):
             args.append('super(%s, _self).%s' % (blk.anon(cls), name))
 
 @wrapper
-def around_super(fn, **_kw):
-    return BWAroundCaller(fn, **_kw)
+def around_super(fn, want_args=True, **_kw):
+    return BWAroundCaller(fn, want_args=want_args, **_kw)
 
