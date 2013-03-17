@@ -317,8 +317,14 @@ class BWMember(AnyConstraint):
     def build_remover(self, fn, name, has_getter):
         pass
 
+    def builder(self, *_args, **_kw):
+        def wrapper(fn):
+            self.default = self.BUILDER(fn.__name__)
+            return fn
+        return wrapper
+
     @staticmethod
-    def builder(_name, *_args, **_kw):
+    def BUILDER(_name, *_args, **_kw):
         if isinstance(_name, basestring):
             def builder(self):
                 obj = getattr(self, _name)
@@ -352,5 +358,5 @@ class BWConstMember(BWMember):
 
 MEMBER = BWMember
 CONST = BWConstMember
-BUILDER = MEMBER.builder
+BUILDER = MEMBER.BUILDER
 
