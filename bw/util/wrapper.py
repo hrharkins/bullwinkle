@@ -150,7 +150,12 @@ def wrapper(wrap_fn=None, auto_name=True, auto_doc=True,
             if _fn is None:
                 return lambda f: builder(f, **_kw)
             elif not isinstance(_fn, allowed_types):
-                return lambda f: builder(f, _fn, *_args, **_kw)
+                if (isinstance(_fn, type)
+                    and len(_args)
+                    and isinstance(_args[0], allowed_types)):
+                    return builder(_args[0], _fn, *_args[1:], **_kw)
+                else:
+                    return lambda f: builder(f, _fn, *_args, **_kw)
             else:
                 result = wrap_fn(_fn, *_args, **_kw)
                 if result is None:
