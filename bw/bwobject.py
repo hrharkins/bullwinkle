@@ -101,6 +101,14 @@ class BWMeta(type, Constrainable):
         _kw.setdefault('registry', cls)
         return cls.isa_factory(*options, **_kw)
 
+    def member(cls, *_args, **_kw):
+        from bw.bwmember import BWMember
+        return BWMember(*_args, into=cls, **_kw)
+
+    def cached(cls, *_args, **_kw):
+        from bw.bwmember import BWCachedMember
+        return BWCachedMember(*_args, into=cls, **_kw)
+
     @staticmethod
     def positional(*names):
         def positional_setup(target):
