@@ -137,12 +137,12 @@ class BWMember(AnyConstraint):
         extra, kw = self.init(**_options)
         super(BWMember, self).__init__(*(_constraints + extra), **kw)
 
-    def init(self, default=NULL, builder=None, #handles=None,
+    def init(self, default=NULL, builder=None, handles=None,
                    required=True, into=(), lazy=None, **_kw):
 
         self.required = required
 
-        #self.handles = handles
+        self.handles = handles
 
         if builder is not None:
             # TODO: Add wrapper type for builders that want the default
@@ -192,18 +192,18 @@ class BWMember(AnyConstraint):
         # readable.  This code will allow for them though if needed in the
         # future.
 
-        #if self.handles:
-        #    if isinstance(self.handles, (list, tuple, set)):
-        #        for handle in self.handles:
-        #            delegate = self.delegate(handle, name=handle)
-        #            setattr(cls, handle, delegate)
-        #    elif isinstance(self.handles, dict):
-        #        for outer, inner in self.handles.iteritems():
-        #            delegate = self.delegate(inner, name=outer)
-        #            setattr(cls, outer, delegate)
-        #    else:
-        #        delegate = self.delegate(self.handles, name=self.handles)
-        #        setattr(cls, self.handles, delegate)
+        if self.handles:
+            if isinstance(self.handles, (list, tuple, set)):
+                for handle in self.handles:
+                    delegate = self.delegate(handle, name=handle)
+                    setattr(cls, handle, delegate)
+            elif isinstance(self.handles, dict):
+                for outer, inner in self.handles.iteritems():
+                    delegate = self.delegate(inner, name=outer)
+                    setattr(cls, outer, delegate)
+            else:
+                delegate = self.delegate(self.handles, name=self.handles)
+                setattr(cls, self.handles, delegate)
 
         @cls.init_inline
         def setup_member(cls, blk, required=None, set_attr=True, name=name):
